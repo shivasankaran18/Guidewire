@@ -1,0 +1,189 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================
+   LaborGuard Global Styles
+   ============================================ */
+
+:root {
+  --shield-primary: #1d5fd8;
+  --shield-secondary: #3b93f6;
+  --shield-dark: #172a54;
+  --safety-green: #22c55e;
+  --alert-orange: #f97316;
+  --danger-red: #ef4444;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: #0f172a;
+  color: #e2e8f0;
+  min-height: 100vh;
+}
+
+/* ============================================
+   Glassmorphism Cards
+   ============================================ */
+@layer components {
+  .glass-card {
+    @apply bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-glass;
+  }
+
+  .glass-card-light {
+    @apply bg-white/80 backdrop-blur-xl border border-gray-200 rounded-2xl shadow-glass;
+  }
+
+  .gradient-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-shield-400 to-shield-200;
+  }
+
+  .gradient-text-safety {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-safety-400 to-safety-200;
+  }
+
+  .btn-primary {
+    @apply px-6 py-3 bg-gradient-to-r from-shield-600 to-shield-500 text-white font-semibold 
+           rounded-xl hover:from-shield-500 hover:to-shield-400 transition-all duration-300 
+           shadow-neon-blue hover:shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply px-6 py-3 bg-white/10 border border-white/20 text-white font-semibold 
+           rounded-xl hover:bg-white/20 transition-all duration-300 active:scale-95;
+  }
+
+  .btn-danger {
+    @apply px-6 py-3 bg-gradient-to-r from-danger-600 to-danger-500 text-white font-semibold 
+           rounded-xl hover:from-danger-500 hover:to-danger-400 transition-all duration-300 active:scale-95;
+  }
+
+  .btn-success {
+    @apply px-6 py-3 bg-gradient-to-r from-safety-600 to-safety-500 text-white font-semibold 
+           rounded-xl hover:from-safety-500 hover:to-safety-400 transition-all duration-300 active:scale-95;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white 
+           placeholder-gray-400 focus:outline-none focus:border-shield-500 focus:ring-2 
+           focus:ring-shield-500/20 transition-all duration-300;
+  }
+
+  .stat-card {
+    @apply glass-card p-6 hover:bg-white/10 transition-all duration-300 cursor-default;
+  }
+
+  .nav-link {
+    @apply px-4 py-2 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 
+           transition-all duration-200 font-medium text-sm;
+  }
+
+  .nav-link-active {
+    @apply px-4 py-2 rounded-lg text-white bg-shield-600/30 border border-shield-500/30 
+           font-medium text-sm;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold;
+  }
+
+  .badge-green {
+    @apply badge bg-safety-500/20 text-safety-400 border border-safety-500/30;
+  }
+
+  .badge-amber {
+    @apply badge bg-alert-500/20 text-alert-400 border border-alert-500/30;
+  }
+
+  .badge-red {
+    @apply badge bg-danger-500/20 text-danger-400 border border-danger-500/30;
+  }
+
+  .badge-blue {
+    @apply badge bg-shield-500/20 text-shield-400 border border-shield-500/30;
+  }
+
+  .tier-card {
+    @apply glass-card p-6 hover:border-shield-500/50 transition-all duration-300 cursor-pointer 
+           hover:shadow-neon-blue hover:scale-[1.02];
+  }
+
+  .tier-card-selected {
+    @apply glass-card p-6 border-shield-500 bg-shield-500/10 shadow-neon-blue scale-[1.02];
+  }
+}
+
+/* ============================================
+   Scrollbar
+   ============================================ */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* ============================================
+   Animations
+   ============================================ */
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 5px rgba(59, 147, 246, 0.3); }
+  50% { box-shadow: 0 0 25px rgba(59, 147, 246, 0.6); }
+}
+
+.animate-slide-in {
+  animation: slideIn 0.5s ease-out;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.4s ease-out;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+
+/* Stagger children */
+.stagger-children > * {
+  animation: slideIn 0.5s ease-out both;
+}
+.stagger-children > *:nth-child(1) { animation-delay: 0.05s; }
+.stagger-children > *:nth-child(2) { animation-delay: 0.1s; }
+.stagger-children > *:nth-child(3) { animation-delay: 0.15s; }
+.stagger-children > *:nth-child(4) { animation-delay: 0.2s; }
+.stagger-children > *:nth-child(5) { animation-delay: 0.25s; }
+.stagger-children > *:nth-child(6) { animation-delay: 0.3s; }

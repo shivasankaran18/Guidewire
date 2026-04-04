@@ -1,4 +1,4 @@
-# 🛡️ GigShield
+# 🛡️ LaborGuard
 
 ### AI-Powered Parametric Income Protection for Gig Delivery Workers
 
@@ -47,13 +47,13 @@ Ravi loses **₹2,000 in 3 days** with zero recourse.
 | Protection from weather he can't control    | ❌ Bears full loss alone      |
 
 Gig workers are classified as "independent contractors" — excluded from ESIC,
-PF, and every safety net that exists. **GigShield fixes this.**
+PF, and every safety net that exists. **LaborGuard fixes this.**
 
 ---
 
 ## 💡 Our Solution
 
-GigShield is an **AI-powered parametric income protection platform** exclusively
+LaborGuard is an **AI-powered parametric income protection platform** exclusively
 for food delivery partners (Zomato/Swiggy).
 
 ```
@@ -102,7 +102,7 @@ Tier-1 Indian cities: Chennai, Bengaluru, Mumbai, Hyderabad, Delhi
 
 ### 3. Real-Time Monitoring
 
-- GigShield silently monitors 5 parametric triggers for his zone 24/7
+- LaborGuard silently monitors 5 parametric triggers for his zone 24/7
 - No action needed from Ravi
 
 ### 4. Automatic Claim + Payout
@@ -168,7 +168,7 @@ real-world data sources simultaneously.
 ## 🧬 Earnings DNA Payout
 
 Most parametric platforms pay a **flat amount** (₹500 per disruption day, same
-for everyone). GigShield pays what the worker **actually lost.**
+for everyone). LaborGuard pays what the worker **actually lost.**
 
 ```
 Payout = (Worker's Avg Earnings for that Day/Time slot)
@@ -180,7 +180,7 @@ Payout = (Worker's Avg Earnings for that Day/Time slot)
 
 - Ravi earns more on Friday evenings (festival orders) than Monday mornings
 - A flood on Friday evening = 3× the financial loss of a Monday morning flood
-- GigShield's Earnings DNA profile captures this time-weighted pattern
+- LaborGuard's Earnings DNA profile captures this time-weighted pattern
 - His Friday evening payout reflects his actual loss, not a generic average
 
 **Weekly Payout Cap:** 2× weekly premium × plan multiplier
@@ -202,7 +202,7 @@ at home — triggering mass false payouts and draining the liquidity pool.
 
 ### 1. Differentiating Genuine Workers from Bad Actors
 
-Simple GPS coordinate check is insufficient. GigShield analyzes **7 independent
+Simple GPS coordinate check is insufficient. LaborGuard analyzes **7 independent
 signals simultaneously** to build a Fraud Risk Score (0–100):
 
 | Signal                        | What It Checks                                             | Fraud Indicator                                    |
@@ -236,7 +236,7 @@ If yes → Green. If he teleported from Adyar 10 minutes before → Amber.
 
 ### 2. Detecting Coordinated Fraud Rings
 
-Individual anomaly detection fails against organized syndicates. GigShield
+Individual anomaly detection fails against organized syndicates. LaborGuard
 adds a **group-level behavioral intelligence layer** using:
 
 **Algorithm: Isolation Forest + DBSCAN Clustering**
@@ -415,7 +415,7 @@ Instead of a cold "Approved" or "Rejected", Ravi sees:
 ## 📁 File Structure
 
 ```
-gigshield/
+laborguard/
 ├── README.md
 ├── .env.example
 ├── .gitignore

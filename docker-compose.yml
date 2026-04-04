@@ -1,0 +1,47 @@
+services:
+  backend:
+    build: ./backend
+    image: laborguard/backend:latest
+    container_name: laborguard_backend
+    environment:
+      DATABASE_URL: sqlite+aiosqlite:///./laborguard.db
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRY_HOURS: 24
+      USE_MOCK_APIS: "true"
+      DEBUG: "true"
+      CORS_ORIGINS: http://localhost:5173,http://localhost:3000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./:/app
+      - backend_data:/app/backend/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build: ./frontend
+    image: laborguard/frontend:latest
+    container_name: laborguard_frontend
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+      VITE_APP_NAME: LaborGuard
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev -- --host 0.0.0.0
+
+volumes:
+  backend_data:
+    external: true
+    name: laborguard_backend_data
