@@ -6,9 +6,9 @@ Claim lifecycle management with fraud checking
 import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.models.database import Claim, Policy, Trigger, Payout, Worker, get_db
+from backend.models.database import Claim, Policy, Trigger, Worker, get_db
 from backend.models.schemas import (
     ClaimResponse, ClaimListResponse, AppealRequest, MessageResponse,
 )
@@ -28,23 +28,19 @@ async def get_claims(
 ):
     """Get all claims for the current worker."""
     result = await db.execute(
-        select(Claim).where(
-            Claim.worker_id == current_user["worker_id"]
-        ).order_by(Claim.created_at.desc())
+        select(Claim).where(Claim.worker_id == current_user["worker_id"])
+        .order_by(Claim.created_at.desc())
     )
     claims = list(result.scalars().all())
 
-    # Calculate stats
     pending = sum(1 for c in claims if c.status == "PENDING")
     approved = sum(1 for c in claims if c.status in ("APPROVED", "PAID"))
     total_paid = sum(c.actual_payout or 0 for c in claims if c.status == "PAID")
 
     return ClaimListResponse(
         claims=[ClaimResponse.model_validate(c) for c in claims],
-        total=len(claims),
-        pending_count=pending,
-        approved_count=approved,
-        total_paid=round(total_paid, 2),
+        total=len(claims), pending_count=pending,
+        approved_count=approved, total_paid=round(total_paid, 2),
     )
 
 
@@ -56,15 +52,11 @@ async def get_claim(
 ):
     """Get a specific claim details."""
     result = await db.execute(
-        select(Claim).where(
-            Claim.id == claim_id,
-            Claim.worker_id == current_user["worker_id"],
-        )
+        select(Claim).where(Claim.id == claim_id, Claim.worker_id == current_user["worker_id"])
     )
     claim = result.scalar_one_or_none()
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
-
     return ClaimResponse.model_validate(claim)
 
 
@@ -74,55 +66,37 @@ async def auto_claim(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Automatically create a claim when a trigger fires.
-    Runs fraud detection and processes payout if approved.
-    """
-    # Get trigger
+    """Automatically create a claim when a trigger fires."""
     result = await db.execute(select(Trigger).where(Trigger.id == trigger_id))
     trigger = result.scalar_one_or_none()
     if not trigger:
         raise HTTPException(status_code=404, detail="Trigger not found")
 
-    # Get active policy
     result = await db.execute(
         select(Policy).where(
-            Policy.worker_id == current_user["worker_id"],
-            Policy.status == "ACTIVE",
+            Policy.worker_id == current_user["worker_id"], Policy.status == "ACTIVE",
         ).order_by(Policy.created_at.desc()).limit(1)
     )
     policy = result.scalar_one_or_none()
     if not policy:
         raise HTTPException(status_code=400, detail="No active coverage policy")
 
-    # Run fraud detection
-    worker_result = await db.execute(
-        select(Worker).where(Worker.id == current_user["worker_id"])
-    )
+    worker_result = await db.execute(select(Worker).where(Worker.id == current_user["worker_id"]))
     worker = worker_result.scalar_one_or_none()
 
     fraud_analysis = FraudDetector.generate_demo_analysis(is_genuine=True)
 
-    # Calculate payout
-    disruption_hours = 4.0  # Default disruption
+    disruption_hours = 4.0
     payout_calc = await PayoutEngine.calculate_payout(
-        db,
-        worker_id=current_user["worker_id"],
-        policy_id=policy.id,
-        trigger_type=trigger.trigger_type,
-        disruption_hours=disruption_hours,
+        db, worker_id=current_user["worker_id"], policy_id=policy.id,
+        trigger_type=trigger.trigger_type, disruption_hours=disruption_hours,
     )
 
-    # Create claim
     claim = Claim(
-        id=str(uuid.uuid4()),
-        worker_id=current_user["worker_id"],
-        policy_id=policy.id,
-        trigger_id=trigger_id,
-        zone_code=trigger.zone_code,
-        claim_type=trigger.trigger_type,
-        disruption_hours=disruption_hours,
-        working_hours=10.0,
+        id=str(uuid.uuid4()), worker_id=current_user["worker_id"],
+        policy_id=policy.id, trigger_id=trigger_id,
+        zone_code=trigger.zone_code, claim_type=trigger.trigger_type,
+        disruption_hours=disruption_hours, working_hours=10.0,
         earnings_for_slot=payout_calc["earnings_for_slot"],
         calculated_payout=payout_calc["calculated_payout"],
         payout_cap=payout_calc["payout_cap"],
@@ -133,71 +107,48 @@ async def auto_claim(
         verification_method=fraud_analysis["verification_method"],
     )
 
-    # Auto-approve GREEN claims
     if fraud_analysis["fraud_tier"] == "GREEN":
         claim.status = "APPROVED"
         claim.actual_payout = payout_calc["actual_payout"]
         claim.resolved_at = datetime.now(timezone.utc)
 
-        # Process payout
-        payout = await PayoutEngine.process_payout(
-            db, claim.id, payout_calc["actual_payout"]
-        )
+        db.add(claim)
+        await db.flush()
 
-        # Notify worker
+        payout = await PayoutEngine.process_payout(db, claim.id, payout_calc["actual_payout"])
         NotificationService.send_payout_notification(
-            current_user["worker_id"],
-            payout_calc["actual_payout"],
-            trigger.trigger_type,
-            fraud_analysis["confidence_score"],
+            current_user["worker_id"], payout_calc["actual_payout"],
+            trigger.trigger_type, fraud_analysis["confidence_score"],
         )
-    elif fraud_analysis["fraud_tier"] == "AMBER":
-        claim.status = "PENDING"
     else:
         claim.status = "PENDING"
-
-    db.add(claim)
-    await db.flush()
+        db.add(claim)
+        await db.flush()
 
     await AuditLogger.log(
         db, "CLAIM", claim.id, "CREATED",
         actor_id=current_user["worker_id"],
-        new_state={
-            "trigger": trigger.trigger_type,
-            "fraud_tier": fraud_analysis["fraud_tier"],
-            "payout": payout_calc["actual_payout"],
-        },
+        new_state={"trigger": trigger.trigger_type, "fraud_tier": fraud_analysis["fraud_tier"], "payout": payout_calc["actual_payout"]},
     )
-
     return ClaimResponse.model_validate(claim)
 
 
 @router.post("/appeal/{claim_id}", response_model=MessageResponse)
 async def appeal_claim(
-    claim_id: str,
-    request: AppealRequest,
+    claim_id: str, request: AppealRequest,
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Appeal a rejected or held claim.
-    Workers can appeal within 48 hours via one-tap appeal.
-    """
+    """Appeal a rejected or held claim."""
     result = await db.execute(
-        select(Claim).where(
-            Claim.id == claim_id,
-            Claim.worker_id == current_user["worker_id"],
-        )
+        select(Claim).where(Claim.id == claim_id, Claim.worker_id == current_user["worker_id"])
     )
     claim = result.scalar_one_or_none()
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
 
     if claim.status not in ("REJECTED", "PENDING"):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot appeal a {claim.status} claim",
-        )
+        raise HTTPException(status_code=400, detail=f"Cannot appeal a {claim.status} claim")
 
     claim.appeal_status = "PENDING"
     claim.appeal_reason = request.reason
@@ -211,12 +162,7 @@ async def appeal_claim(
     )
 
     NotificationService.send_claim_update(
-        current_user["worker_id"],
-        claim_id,
-        "APPEALED",
+        current_user["worker_id"], claim_id, "APPEALED",
         "Your appeal has been submitted. Manual review within 2 hours.",
     )
-
-    return MessageResponse(
-        message="Appeal submitted successfully. You'll hear back within 2 hours.",
-    )
+    return MessageResponse(message="Appeal submitted successfully. You'll hear back within 2 hours.")

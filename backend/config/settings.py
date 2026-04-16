@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     aes_encryption_key: str = "dev-32-byte-aes-key-change-prod!"
 
     # Database
-    database_url: str = "sqlite+aiosqlite:///./gigpulse_sentinel.db"
+    database_url: str = os.getenv("DATABASE_URL", "")
 
     # Supabase (optional, for production)
     supabase_url: str = ""

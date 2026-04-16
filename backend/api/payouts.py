@@ -22,9 +22,8 @@ async def get_my_payouts(
 ):
     """Get all payouts for the current worker."""
     result = await db.execute(
-        select(Payout).where(
-            Payout.worker_id == current_user["worker_id"]
-        ).order_by(Payout.created_at.desc())
+        select(Payout).where(Payout.worker_id == current_user["worker_id"])
+        .order_by(Payout.created_at.desc())
     )
     payouts = list(result.scalars().all())
 
@@ -34,11 +33,8 @@ async def get_my_payouts(
     return {
         "payouts": [
             {
-                "id": p.id,
-                "claim_id": p.claim_id,
-                "amount": p.amount,
-                "upi_reference": p.upi_reference,
-                "payment_status": p.payment_status,
+                "id": p.id, "claim_id": p.claim_id, "amount": p.amount,
+                "upi_reference": p.upi_reference, "payment_status": p.payment_status,
                 "goodwill_credit": p.goodwill_credit or 0,
                 "paid_at": p.paid_at.isoformat() if p.paid_at else None,
             }
@@ -58,21 +54,15 @@ async def get_payout_detail(
 ):
     """Get a specific payout detail."""
     result = await db.execute(
-        select(Payout).where(
-            Payout.id == payout_id,
-            Payout.worker_id == current_user["worker_id"],
-        )
+        select(Payout).where(Payout.id == payout_id, Payout.worker_id == current_user["worker_id"])
     )
     payout = result.scalar_one_or_none()
     if not payout:
         raise HTTPException(status_code=404, detail="Payout not found")
 
     return {
-        "id": payout.id,
-        "claim_id": payout.claim_id,
-        "amount": payout.amount,
-        "upi_reference": payout.upi_reference,
-        "payment_method": payout.payment_method,
+        "id": payout.id, "claim_id": payout.claim_id, "amount": payout.amount,
+        "upi_reference": payout.upi_reference, "payment_method": payout.payment_method,
         "payment_status": payout.payment_status,
         "goodwill_credit": payout.goodwill_credit or 0,
         "total": payout.amount + (payout.goodwill_credit or 0),
@@ -95,25 +85,19 @@ async def process_payout(
     if claim.status != "APPROVED":
         raise HTTPException(status_code=400, detail=f"Claim is {claim.status}, not APPROVED")
 
-    # Check if payout already exists
-    existing = await db.execute(
-        select(Payout).where(Payout.claim_id == claim_id)
-    )
+    existing = await db.execute(select(Payout).where(Payout.claim_id == claim_id))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Payout already processed for this claim")
 
     payout = Payout(
-        id=str(uuid.uuid4()),
-        claim_id=claim_id,
-        worker_id=claim.worker_id,
+        id=str(uuid.uuid4()), claim_id=claim_id, worker_id=claim.worker_id,
         amount=claim.calculated_payout,
         upi_reference=f"UPI_{uuid.uuid4().hex[:12].upper()}",
-        payment_method="UPI",
-        payment_status="COMPLETED",
+        payment_method="UPI", payment_status="COMPLETED",
         paid_at=datetime.now(timezone.utc),
     )
-
     db.add(payout)
+
     claim.status = "PAID"
     claim.actual_payout = claim.calculated_payout
     claim.paid_at = datetime.now(timezone.utc)
@@ -121,13 +105,11 @@ async def process_payout(
 
     await AuditLogger.log(
         db, "PAYOUT", payout.id, "PROCESSED",
-        actor_id=current_user["worker_id"],
-        actor_role="ADMIN",
+        actor_id=current_user["worker_id"], actor_role="ADMIN",
         new_state={"amount": payout.amount, "claim_id": claim_id},
     )
 
     return {
         "message": f"Payout of ₹{payout.amount:,.0f} processed successfully",
-        "payout_id": payout.id,
-        "upi_reference": payout.upi_reference,
+        "payout_id": payout.id, "upi_reference": payout.upi_reference,
     }

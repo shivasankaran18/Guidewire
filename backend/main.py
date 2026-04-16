@@ -5,16 +5,18 @@ AI-Powered Parametric Income Protection for Gig Delivery Workers
 
 from contextlib import asynccontextmanager
 import sys
+import uuid
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.config.settings import get_settings
-from backend.models.database import init_db
+from backend.models.database import init_db, close_db, async_session, Zone
 from backend.middleware.rate_limiter import RateLimiterMiddleware
 from backend.api import (
     auth_router, policies_router, claims_router,
     triggers_router, workers_router, admin_router,
 )
+from sqlalchemy import select
 
 settings = get_settings()
 
@@ -24,13 +26,10 @@ async def lifespan(app: FastAPI):
     """Application lifecycle - initialize DB on startup."""
     await init_db()
     print("🛡️ GigPulse Sentinel Backend Started")
-    print(f"📊 Database: {settings.database_url}")
+    print(f"📊 Database: PostgreSQL (Neon)")
     print(f"🔧 Mock APIs: {'Enabled' if settings.use_mock_apis else 'Disabled'}")
 
     # Seed zones on startup
-    from backend.services.zone_engine import ZoneEngine
-    from backend.models.database import async_session, Zone
-    from sqlalchemy import select
     async with async_session() as session:
         result = await session.execute(select(Zone).limit(1))
         if not result.scalar_one_or_none():
@@ -39,6 +38,7 @@ async def lifespan(app: FastAPI):
             print("🌍 Seeded default zones")
 
     yield
+    await close_db()
     print("🛡️ GigPulse Sentinel Backend Shutting Down")
 
 
@@ -71,7 +71,6 @@ app.include_router(admin_router, prefix="/api")
 
 # Mock APIs (if enabled)
 if settings.use_mock_apis:
-    # Support loading mock API modules from the repository's "mock-apis" directory.
     mock_apis_dir = Path(__file__).resolve().parent.parent / "mock-apis"
     if mock_apis_dir.exists() and str(mock_apis_dir) not in sys.path:
         sys.path.append(str(mock_apis_dir))
@@ -107,9 +106,6 @@ async def health():
 
 async def _seed_zones(session):
     """Seed default zones."""
-    from backend.models.database import Zone
-    import uuid
-
     zones_data = [
         ("CHN-VEL-4B", "Chennai", "Velachery", "4B", 12.9815, 80.2180, 85, 45, 55, 1.5, "HIGH"),
         ("CHN-VEL-4A", "Chennai", "Velachery", "4A", 12.9780, 80.2210, 80, 44, 53, 1.5, "HIGH"),
@@ -134,10 +130,9 @@ async def _seed_zones(session):
 
     for z in zones_data:
         zone = Zone(
-            id=str(uuid.uuid4()),
-            zone_code=z[0], city=z[1], area_name=z[2], sub_zone=z[3],
-            latitude=z[4], longitude=z[5],
-            flood_risk_score=z[6], heat_risk_score=z[7], aqi_risk_score=z[8],
-            strike_frequency_yearly=z[9], overall_risk_level=z[10],
+            id=str(uuid.uuid4()), zone_code=z[0], city=z[1], area_name=z[2], sub_zone=z[3],
+            latitude=float(z[4]), longitude=float(z[5]),
+            flood_risk_score=float(z[6]), heat_risk_score=float(z[7]), aqi_risk_score=float(z[8]),
+            strike_frequency_yearly=float(z[9]), overall_risk_level=z[10],
         )
         session.add(zone)
