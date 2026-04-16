@@ -54,11 +54,11 @@ docker-compose down 2>/dev/null || true
 echo ""
 
 echo -e "${BLUE}Step 2/5: Ensuring Docker volume exists...${NC}"
-if ! docker volume inspect laborguard_backend_data >/dev/null 2>&1; then
-    docker volume create laborguard_backend_data >/dev/null
-    echo -e "${GREEN}[OK] Created volume: laborguard_backend_data${NC}"
+if ! docker volume inspect gigpulsesentinel_backend_data >/dev/null 2>&1; then
+    docker volume create gigpulsesentinel_backend_data >/dev/null
+    echo -e "${GREEN}[OK] Created volume: gigpulsesentinel_backend_data${NC}"
 else
-    echo -e "${GREEN}[OK] Volume exists: laborguard_backend_data${NC}"
+    echo -e "${GREEN}[OK] Volume exists: gigpulsesentinel_backend_data${NC}"
 fi
 echo ""
 

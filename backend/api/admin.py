@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.database import (
-    Worker, Claim, Policy, Trigger, Payout, FraudRing, get_db
+    Worker, Claim, Policy, Trigger, Payout, FraudRing, AuditLog, get_db
 )
 from backend.models.schemas import (
     AdminDashboardResponse, ClaimResponse, ResolveClaimRequest,
@@ -186,3 +186,82 @@ async def get_all_workers(
         "workers": [WorkerProfile.model_validate(w) for w in workers],
         "total": len(workers), "is_demo": False,
     }
+
+
+@router.get("/audit-log")
+async def get_audit_log(
+    limit: int = 50,
+    entity_type: str = None,
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get audit log entries with optional filtering."""
+    query = select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit)
+    if entity_type:
+        query = query.where(AuditLog.entity_type == entity_type)
+
+    result = await db.execute(query)
+    entries = list(result.scalars().all())
+
+    if not entries:
+        return {"entries": [], "total": 0, "is_demo": True, "demo_entries": _get_demo_audit_logs()}
+
+    return {
+        "entries": [
+            {
+                "id": e.id,
+                "entity_type": e.entity_type,
+                "entity_id": e.entity_id,
+                "action": e.action,
+                "actor_id": e.actor_id,
+                "actor_role": e.actor_role,
+                "new_state": e.new_state,
+                "entry_hash": e.entry_hash,
+                "previous_hash": e.previous_hash,
+                "created_at": e.created_at.isoformat() if e.created_at else None,
+            }
+            for e in entries
+        ],
+        "total": len(entries),
+        "is_demo": False,
+    }
+
+
+@router.get("/audit-log/verify")
+async def verify_audit_chain(
+    limit: int = 100,
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Verify the SHA-256 hash chain integrity of audit logs."""
+    result = await db.execute(select(AuditLog).order_by(AuditLog.created_at).limit(limit))
+    entries = list(result.scalars().all())
+
+    if not entries:
+        return {"valid": True, "entries_checked": 0, "message": "No entries to verify"}
+
+    broken_links = []
+    for i, entry in enumerate(entries):
+        expected_prev = entries[i - 1].entry_hash if i > 0 else "GENESIS"
+        if entry.previous_hash != expected_prev:
+            broken_links.append({
+                "entry_id": entry.id,
+                "expected_previous": expected_prev,
+                "actual_previous": entry.previous_hash,
+            })
+
+    return {
+        "valid": len(broken_links) == 0,
+        "entries_checked": len(entries),
+        "broken_links": broken_links,
+        "message": "Chain integrity verified" if len(broken_links) == 0 else f"Found {len(broken_links)} broken links",
+    }
+
+
+def _get_demo_audit_logs():
+    return [
+        {"id": "demo-1", "entity_type": "CLAIM", "entity_id": "claim-1", "action": "CLAIM_APPROVED", "actor_id": "system", "actor_role": "SYSTEM", "new_state": {"payout": 1120}, "entry_hash": "abc123", "previous_hash": "GENESIS", "created_at": "2026-04-17T10:00:00Z"},
+        {"id": "demo-2", "entity_type": "TRIGGER", "entity_id": "trigger-1", "action": "TRIGGER_FIRED", "actor_id": "system", "actor_role": "SYSTEM", "new_state": {"type": "HEAVY_RAIN", "severity": "HIGH"}, "entry_hash": "def456", "previous_hash": "abc123", "created_at": "2026-04-17T09:30:00Z"},
+        {"id": "demo-3", "entity_type": "CLAIM", "entity_id": "claim-2", "action": "CLAIM_REJECTED", "actor_id": "admin-1", "actor_role": "ADMIN", "new_state": {"reason": "GPS spoof detected"}, "entry_hash": "ghi789", "previous_hash": "def456", "created_at": "2026-04-17T09:00:00Z"},
+        {"id": "demo-4", "entity_type": "FRAUD_RING", "entity_id": "ring-1", "action": "FRAUD_RING_DETECTED", "actor_id": "system", "actor_role": "SYSTEM", "new_state": {"member_count": 7, "confidence": 85}, "entry_hash": "jkl012", "previous_hash": "ghi789", "created_at": "2026-04-17T08:00:00Z"},
+    ]

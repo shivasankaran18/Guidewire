@@ -19,7 +19,9 @@ export default function ClaimCard({ claim }) {
             <Icon className={`w-5 h-5 ${color}`} />
           </div>
           <div>
-            <p className="text-sm font-semibold text-white">{claim.claim_type?.replace(/_/g, ' ')}</p>
+            <Link to={`/claims/${claim.id}`} className="text-sm font-semibold text-white hover:text-shield-400 transition-colors">
+              {claim.claim_type?.replace(/_/g, ' ')}
+            </Link>
             <p className="text-xs text-gray-400 mt-0.5">Zone: {claim.zone_code} • {claim.disruption_hours}h disrupted</p>
           </div>
         </div>
@@ -41,11 +43,16 @@ export default function ClaimCard({ claim }) {
         </div>
       </div>
 
-      {(claim.status === 'REJECTED' || claim.status === 'PENDING') && (
-        <Link to={`/appeal/${claim.id}`} className="flex items-center gap-1 text-xs text-shield-400 mt-3 group-hover:underline">
-          Appeal this claim <ArrowRight className="w-3 h-3" />
+      <div className="flex items-center justify-between mt-3">
+        <Link to={`/claims/${claim.id}`} className="flex items-center gap-1 text-xs text-shield-400 group-hover:underline">
+          View Details <ArrowRight className="w-3 h-3" />
         </Link>
-      )}
+        {(claim.status === 'REJECTED' || claim.status === 'PENDING') && (
+          <Link to={`/appeal/${claim.id}`} className="flex items-center gap-1 text-xs text-alert-400 hover:text-alert-300">
+            Appeal <ArrowRight className="w-3 h-3" />
+          </Link>
+        )}
+      </div>
     </div>
   )
 }

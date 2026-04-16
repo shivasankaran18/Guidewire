@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
-import { Shield, LayoutDashboard, FileText, AlertTriangle, User, LogOut, Settings } from 'lucide-react'
+import { Shield, LayoutDashboard, FileText, AlertTriangle, User, LogOut, Settings, Sparkles } from 'lucide-react'
 
 export default function Navbar() {
   const { user, logout } = useAuth()
@@ -12,6 +12,7 @@ export default function Navbar() {
 
   const workerLinks = [
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { path: '/assistant', label: 'AI Assistant', icon: Sparkles },
     { path: '/policy', label: 'Coverage', icon: Shield },
     { path: '/claims', label: 'Claims', icon: FileText },
   ]

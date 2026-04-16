@@ -6,6 +6,7 @@ from .triggers import router as triggers_router
 from .workers import router as workers_router
 from .admin import router as admin_router
 from .payouts import router as payouts_router
+from .agents import router as agents_router
 
 __all__ = [
     "auth_router",
@@ -15,4 +16,5 @@ __all__ = [
     "workers_router",
     "admin_router",
     "payouts_router",
+    "agents_router",
 ]

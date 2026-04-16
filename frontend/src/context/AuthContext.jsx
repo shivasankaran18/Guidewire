@@ -9,15 +9,26 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (token) {
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`
-      const stored = localStorage.getItem('gs_user')
-      if (stored) {
-        try { setUser(JSON.parse(stored)) } catch { setUser(null) }
+    const initAuth = async () => {
+      const storedToken = localStorage.getItem('gs_token')
+      if (storedToken) {
+        api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`
+        const stored = localStorage.getItem('gs_user')
+        if (stored) {
+          try { 
+            setUser(JSON.parse(stored)) 
+          } catch { 
+            localStorage.removeItem('gs_token')
+            localStorage.removeItem('gs_user')
+            delete api.defaults.headers.common['Authorization']
+            setToken(null)
+          }
+        }
       }
+      setLoading(false)
     }
-    setLoading(false)
-  }, [token])
+    initAuth()
+  }, [])
 
   const login = async (authData) => {
     const { access_token, worker_id, role, name } = authData
@@ -49,10 +60,11 @@ export function AuthProvider({ children }) {
     return res.data
   }
 
+  const isAuthenticated = !!token && !loading && !!user
+
   return (
     <AuthContext.Provider value={{
-      user, token, loading,
-      isAuthenticated: !!token && !!user,
+      user, token, loading, isAuthenticated,
       login, logout, demoLogin, demoAdminLogin,
     }}>
       {children}

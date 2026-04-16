@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     supabase_anon_key: str = ""
     supabase_service_key: str = ""
 
-    # External APIs
+    # External APIs - set to real key for live weather data, or "mock" for mock mode
     openweathermap_api_key: str = "mock"
     aqicn_api_key: str = "mock"
     imd_api_base_url: str = "http://localhost:8000/mock/imd"
@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     # Payment
     razorpay_key_id: str = "rzp_test_mock"
     razorpay_key_secret: str = "mock_secret"
+
+    # AI Agents (Cerebras)
+    cerebras_api_key: str = ""
 
     # Mock mode
     use_mock_apis: bool = True

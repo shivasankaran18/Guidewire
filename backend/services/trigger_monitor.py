@@ -6,9 +6,13 @@ Real-time parametric trigger monitoring for 5 trigger types
 import uuid
 import random
 from datetime import datetime, timedelta, timezone
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.database import Trigger, Zone
+from backend.config.settings import get_settings
+
+settings = get_settings()
 
 TRIGGER_CONFIGS = {
     "HEAVY_RAIN": {"name": "Heavy Rainfall", "api_source": "OpenWeatherMap", "threshold": 80, "unit": "mm/hr", "description": "Heavy rainfall exceeding 80mm/hr in zone"},
@@ -28,7 +32,12 @@ class TriggerMonitor:
             return {"zone_code": zone_code, "triggers": [], "error": "Zone not found"}
 
         active_triggers = []
-        weather_data = TriggerMonitor._get_mock_weather(zone)
+        
+        if settings.openweathermap_api_key and settings.openweathermap_api_key != "mock":
+            weather_data = await TriggerMonitor._get_real_weather(zone)
+        else:
+            weather_data = TriggerMonitor._get_mock_weather(zone)
+            
         aqi_data = TriggerMonitor._get_mock_aqi(zone)
         platform_data = TriggerMonitor._get_mock_platform(zone)
 
@@ -88,6 +97,38 @@ class TriggerMonitor:
         elif value >= medium: return "HIGH"
         elif value >= low: return "MODERATE"
         return "LOW"
+
+    @staticmethod
+    async def _get_real_weather(zone):
+        """Fetch actual weather from OpenWeatherMap API"""
+        lat = zone.latitude if zone.latitude else 12.9815
+        lon = zone.longitude if zone.longitude else 80.2180
+        
+        async with httpx.AsyncClient() as client:
+            try:
+                url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={settings.openweathermap_api_key}&units=metric"
+                res = await client.get(url, timeout=5.0)
+                res.raise_for_status()
+                data = res.json()
+                
+                temp = data.get("main", {}).get("temp", 30.0)
+                has_rain = "rain" in data
+                rainfall = data.get("rain", {}).get("1h", 0.0) if has_rain else 0.0
+                
+                flood_alert = "RED" if rainfall > 120 else ("ORANGE" if rainfall > 80 else None)
+                
+                return {
+                    "temperature": temp, 
+                    "humidity": data.get("main", {}).get("humidity", 50), 
+                    "rainfall_mm": round(rainfall, 1), 
+                    "wind_speed_kmh": round(data.get("wind", {}).get("speed", 0) * 3.6, 1), 
+                    "flood_alert": flood_alert, 
+                    "forecast_7day": data.get("weather", [{}])[0].get("description", "Unknown"), 
+                    "sources_agreeing": 3 if (has_rain and rainfall > 20) else 1
+                }
+            except Exception as e:
+                print(f"Error fetching OpenWeatherMap: {e}")
+                return TriggerMonitor._get_mock_weather(zone)
 
     @staticmethod
     def _get_mock_weather(zone):

@@ -7,9 +7,10 @@ import LossRatioChart from '../components/admin/LossRatioChart'
 import PredictiveRiskMap from '../components/admin/PredictiveRiskMap'
 import WorkerTrustTable from '../components/admin/WorkerTrustTable'
 import AdminActionLog from '../components/admin/AdminActionLog'
+import AdminAIWorkbench from '../components/admin/AdminAIWorkbench'
 import { formatCurrency } from '../utils/formatCurrency'
 import api from '../utils/api'
-import { Users, FileText, AlertTriangle, IndianRupee, Shield, Clock, TrendingUp, Eye } from 'lucide-react'
+import { Users, FileText, AlertTriangle, IndianRupee, Shield, Clock, TrendingUp, Eye, Sparkles } from 'lucide-react'
 
 export default function AdminDashboard() {
   const { user } = useAuth()
@@ -50,6 +51,7 @@ export default function AdminDashboard() {
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: TrendingUp },
+    { id: 'ai', label: 'AI Workbench', icon: Sparkles },
     { id: 'review', label: `Review Queue (${d.pending_review_count})`, icon: Eye },
     { id: 'fraud', label: 'Fraud Rings', icon: AlertTriangle },
     { id: 'workers', label: 'Workers', icon: Users },
@@ -133,6 +135,8 @@ export default function AdminDashboard() {
           <PredictiveRiskMap />
         </div>
       )}
+
+      {tab === 'ai' && <AdminAIWorkbench />}
 
       {/* Review Queue Tab */}
       {tab === 'review' && (
