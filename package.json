@@ -4,11 +4,11 @@
   "description": "An AI-Powered Parametric Income Agent for Gig Workers",
   "scripts": {
     "dev:frontend": "cd frontend && npm run dev",
-    "dev:backend": "uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000",
+    "dev:backend": "source backend/venv/bin/activate && uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "build": "cd frontend && npm run build",
-    "seed": "cd backend && python -m scripts.seed_data",
-    "test": "cd backend && python -m pytest ../tests/ -v"
+    "seed": "cd backend && source venv/bin/activate && python -m scripts.seed_data",
+    "test": "cd backend && source venv/bin/activate && python -m pytest ../tests/ -v"
   },
   "keywords": [
     "gigpulsesentinel",
@@ -18,5 +18,8 @@
     "guidewire"
   ],
   "author": "TechNova",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
 }

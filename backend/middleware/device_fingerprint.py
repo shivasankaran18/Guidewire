@@ -10,10 +10,8 @@ from backend.models.database import Worker, async_session
 
 
 def generate_device_fingerprint(
-    user_agent: str = "",
-    screen_resolution: str = "",
-    platform: str = "",
-    hardware_concurrency: str = "",
+    user_agent: str = "", screen_resolution: str = "",
+    platform: str = "", hardware_concurrency: str = "",
     device_model: str = "",
 ) -> str:
     """Generate a device fingerprint hash from device attributes."""
@@ -21,34 +19,23 @@ def generate_device_fingerprint(
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-async def validate_device_fingerprint(
-    worker_id: str,
-    device_fingerprint: str,
-) -> dict:
-    """
-    Validate that the device fingerprint matches the registered device.
-    Returns validation result with details.
-    """
+async def validate_device_fingerprint(worker_id: str, device_fingerprint: str) -> dict:
+    """Validate that the device fingerprint matches the registered device."""
     async with async_session() as session:
-        result = await session.execute(
-            select(Worker).where(Worker.id == worker_id)
-        )
+        result = await session.execute(select(Worker).where(Worker.id == worker_id))
         worker = result.scalar_one_or_none()
 
         if not worker:
             return {"valid": False, "reason": "Worker not found"}
 
-        # First login — register device
         if not worker.device_fingerprint:
             worker.device_fingerprint = device_fingerprint
             await session.commit()
             return {"valid": True, "reason": "Device registered"}
 
-        # Check match
         if worker.device_fingerprint == device_fingerprint:
             return {"valid": True, "reason": "Device matched"}
 
-        # Mismatch — potential account sharing or spoofing
         return {
             "valid": False,
             "reason": "Device mismatch — One Device = One Account policy",
@@ -58,41 +45,27 @@ async def validate_device_fingerprint(
 
 
 def detect_mock_gps(device_info: dict) -> dict:
-    """
-    Check for signs of GPS spoofing or rooted device.
-    Returns detection result.
-    """
+    """Check for signs of GPS spoofing or rooted device."""
     suspicious_signals = []
     risk_score = 0
 
-    # Check for root/jailbreak indicators
     if device_info.get("is_rooted", False):
         suspicious_signals.append("Device appears to be rooted")
         risk_score += 40
 
-    # Check for mock location apps
     mock_apps = device_info.get("installed_apps", [])
-    known_spoof_apps = [
-        "fake gps", "mock locations", "gps joystick",
-        "fly gps", "location changer", "fake location"
-    ]
+    known_spoof_apps = ["fake gps", "mock locations", "gps joystick", "fly gps", "location changer", "fake location"]
     for app in mock_apps:
         if any(spoof in app.lower() for spoof in known_spoof_apps):
             suspicious_signals.append(f"Spoofing app detected: {app}")
             risk_score += 30
 
-    # Check if mock location is enabled
     if device_info.get("mock_location_enabled", False):
         suspicious_signals.append("Mock location setting is enabled")
         risk_score += 25
 
-    # Check for emulator
     if device_info.get("is_emulator", False):
         suspicious_signals.append("Running on emulator")
         risk_score += 35
 
-    return {
-        "is_suspicious": risk_score > 20,
-        "risk_score": min(risk_score, 100),
-        "signals": suspicious_signals,
-    }
+    return {"is_suspicious": risk_score > 20, "risk_score": min(risk_score, 100), "signals": suspicious_signals}

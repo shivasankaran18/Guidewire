@@ -1,34 +1,70 @@
 """
 LaborGuard Database Models & Connection
-SQLAlchemy ORM models matching the PostgreSQL schema
+Async SQLAlchemy ORM with asyncpg for PostgreSQL
 """
 
+import os
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
+
 from sqlalchemy import (
-    Column, String, Integer, Float, Boolean, DateTime, Text, JSON, ForeignKey,
-    create_engine, Index, UniqueConstraint
+    Boolean, Column, DateTime, Float, Integer, String, Text, ForeignKey, JSON,
+    UniqueConstraint, create_engine
 )
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.orm import DeclarativeBase, relationship
-from backend.config.settings import get_settings
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.orm import DeclarativeBase, relationship, Mapped, mapped_column
+from dotenv import load_dotenv
+
+# Load .env from project root
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', '.env'))
+
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+# Strip any surrounding quotes
+DATABASE_URL = DATABASE_URL.strip('"').strip("'")
+
+# Convert postgres:// to postgresql+asyncpg://
+if DATABASE_URL.startswith("postgresql://"):
+    ASYNC_DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+elif DATABASE_URL.startswith("postgres://"):
+    ASYNC_DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
+else:
+    ASYNC_DATABASE_URL = DATABASE_URL
+
+# Remove params not supported by asyncpg
+import re
+# Remove channel_binding param
+ASYNC_DATABASE_URL = re.sub(r'[&?]channel_binding=[^&]*', '', ASYNC_DATABASE_URL)
+# Replace sslmode with ssl (asyncpg uses 'ssl' not 'sslmode')
+ASYNC_DATABASE_URL = ASYNC_DATABASE_URL.replace('sslmode=require', 'ssl=require')
+# Fix possible broken query string (leading & without ?)
+ASYNC_DATABASE_URL = re.sub(r'\?&', '?', ASYNC_DATABASE_URL)
+# Remove trailing ? if no params left
+if ASYNC_DATABASE_URL.endswith('?'):
+    ASYNC_DATABASE_URL = ASYNC_DATABASE_URL[:-1]
+
+engine = create_async_engine(ASYNC_DATABASE_URL, echo=False, pool_pre_ping=True)
+async_session = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 
 class Base(DeclarativeBase):
     pass
 
 
-# ============================================
-# ZONES
-# ============================================
+def generate_uuid():
+    return str(uuid.uuid4())
+
+
+# ─── Models ──────────────────────────────────────────────────────────────────
+
 class Zone(Base):
     __tablename__ = "zones"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    zone_code = Column(String(20), unique=True, nullable=False)
-    city = Column(String(100), nullable=False)
-    area_name = Column(String(200), nullable=False)
-    sub_zone = Column(String(10))
+    id = Column(String, primary_key=True, default=generate_uuid)
+    zone_code = Column(String, unique=True, nullable=False)
+    city = Column(String, nullable=False)
+    area_name = Column(String, nullable=False)
+    sub_zone = Column(String, nullable=True)
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
     radius_meters = Column(Integer, default=500)
@@ -36,292 +72,256 @@ class Zone(Base):
     heat_risk_score = Column(Float, default=0)
     aqi_risk_score = Column(Float, default=0)
     strike_frequency_yearly = Column(Float, default=0)
-    overall_risk_level = Column(String(20), default="LOW")
+    overall_risk_level = Column(String, default="LOW")
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     workers = relationship("Worker", back_populates="zone")
     triggers = relationship("Trigger", back_populates="zone")
 
 
-# ============================================
-# WORKERS
-# ============================================
 class Worker(Base):
     __tablename__ = "workers"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    phone = Column(String(15), unique=True, nullable=False)
-    name = Column(String(200), nullable=False)
-    platform = Column(String(50), nullable=False)
-    platform_worker_id = Column(String(100), nullable=False)
-    aadhaar_last4 = Column(String(4))
-    aadhaar_hash = Column(String(256))
-    upi_id_hash = Column(String(256))
-    upi_id_masked = Column(String(50))
-    selfie_hash = Column(String(256))
-    device_fingerprint = Column(String(512))
-    device_model = Column(String(200))
-    zone_id = Column(String(36), ForeignKey("zones.id"))
-    primary_zone_code = Column(String(20))
+    id = Column(String, primary_key=True, default=generate_uuid)
+    phone = Column(String, unique=True, nullable=False)
+    name = Column(String, nullable=False)
+    platform = Column(String, nullable=True)
+    platform_worker_id = Column(String, nullable=True)
+    aadhaar_last4 = Column(String, nullable=True)
+    aadhaar_hash = Column(String, nullable=True)
+    upi_id_hash = Column(String, nullable=True)
+    upi_id_masked = Column(String, nullable=True)
+    selfie_hash = Column(String, nullable=True)
+    device_fingerprint = Column(String, nullable=True)
+    device_model = Column(String, nullable=True)
+    zone_id = Column(String, ForeignKey("zones.id"), nullable=True)
+    primary_zone_code = Column(String, nullable=True)
     avg_daily_earnings = Column(Float, default=0)
     avg_weekly_earnings = Column(Float, default=0)
     tenure_weeks = Column(Integer, default=0)
     trust_score = Column(Float, default=50.0)
     is_verified_partner = Column(Boolean, default=False)
     fraud_strikes = Column(Integer, default=0)
-    account_status = Column(String(20), default="PROBATION")
-    probation_end_date = Column(DateTime)
-    role = Column(String(20), default="WORKER")
-    last_login_at = Column(DateTime)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    account_status = Column(String, default="PROBATION")
+    probation_end_date = Column(DateTime(timezone=True), nullable=True)
+    role = Column(String, default="WORKER")
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     zone = relationship("Zone", back_populates="workers")
     policies = relationship("Policy", back_populates="worker")
     claims = relationship("Claim", back_populates="worker", foreign_keys="Claim.worker_id")
+    reviewed_claims = relationship("Claim", back_populates="reviewer", foreign_keys="Claim.reviewed_by")
+    resolved_fraud_rings = relationship("FraudRing", back_populates="resolver", foreign_keys="FraudRing.resolved_by")
     payouts = relationship("Payout", back_populates="worker")
     earnings_patterns = relationship("EarningsPattern", back_populates="worker")
     movement_signatures = relationship("MovementSignature", back_populates="worker")
 
 
-# ============================================
-# POLICIES
-# ============================================
 class Policy(Base):
     __tablename__ = "policies"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    worker_id = Column(String(36), ForeignKey("workers.id"), nullable=False)
-    plan_tier = Column(String(20), nullable=False)
+    id = Column(String, primary_key=True, default=generate_uuid)
+    worker_id = Column(String, ForeignKey("workers.id"), nullable=False)
+    plan_tier = Column(String, nullable=False)
     premium_amount = Column(Float, nullable=False)
     coverage_amount = Column(Float, nullable=False)
     coverage_multiplier = Column(Float, nullable=False)
-    week_start = Column(String(10), nullable=False)
-    week_end = Column(String(10), nullable=False)
-    status = Column(String(20), default="ACTIVE")
-    payment_reference = Column(String(200))
-    payment_status = Column(String(20), default="PENDING")
-    risk_factors = Column(JSON)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    week_start = Column(String, nullable=False)
+    week_end = Column(String, nullable=False)
+    status = Column(String, default="ACTIVE")
+    payment_reference = Column(String, nullable=True)
+    payment_status = Column(String, default="PENDING")
+    risk_factors = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     worker = relationship("Worker", back_populates="policies")
     claims = relationship("Claim", back_populates="policy")
 
 
-# ============================================
-# TRIGGERS
-# ============================================
 class Trigger(Base):
     __tablename__ = "triggers"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    zone_id = Column(String(36), ForeignKey("zones.id"), nullable=False)
-    zone_code = Column(String(20), nullable=False)
-    trigger_type = Column(String(50), nullable=False)
-    severity = Column(String(20), nullable=False)
-    threshold_value = Column(Float)
-    threshold_limit = Column(Float)
-    source_primary = Column(String(100))
-    source_secondary = Column(String(100))
-    source_tertiary = Column(String(100))
+    id = Column(String, primary_key=True, default=generate_uuid)
+    zone_id = Column(String, ForeignKey("zones.id"), nullable=False)
+    zone_code = Column(String, nullable=False)
+    trigger_type = Column(String, nullable=False)
+    severity = Column(String, nullable=False)
+    threshold_value = Column(Float, nullable=True)
+    threshold_limit = Column(Float, nullable=True)
+    source_primary = Column(String, nullable=True)
+    source_secondary = Column(String, nullable=True)
+    source_tertiary = Column(String, nullable=True)
     sources_agreeing = Column(Integer, default=0)
     auto_approved = Column(Boolean, default=False)
-    raw_data = Column(JSON)
-    triggered_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    expires_at = Column(DateTime)
-    status = Column(String(20), default="ACTIVE")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    raw_data = Column(JSON, nullable=True)
+    triggered_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    status = Column(String, default="ACTIVE")
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     zone = relationship("Zone", back_populates="triggers")
     claims = relationship("Claim", back_populates="trigger")
 
 
-# ============================================
-# CLAIMS
-# ============================================
 class Claim(Base):
     __tablename__ = "claims"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    worker_id = Column(String(36), ForeignKey("workers.id"), nullable=False)
-    policy_id = Column(String(36), ForeignKey("policies.id"), nullable=False)
-    trigger_id = Column(String(36), ForeignKey("triggers.id"), nullable=False)
-    zone_code = Column(String(20), nullable=False)
-    claim_type = Column(String(50), nullable=False)
+    id = Column(String, primary_key=True, default=generate_uuid)
+    worker_id = Column(String, ForeignKey("workers.id"), nullable=False)
+    policy_id = Column(String, ForeignKey("policies.id"), nullable=False)
+    trigger_id = Column(String, ForeignKey("triggers.id"), nullable=False)
+    zone_code = Column(String, nullable=False)
+    claim_type = Column(String, nullable=False)
     disruption_hours = Column(Float, nullable=False)
     working_hours = Column(Float, default=10)
-    earnings_for_slot = Column(Float)
+    earnings_for_slot = Column(Float, nullable=True)
     calculated_payout = Column(Float, nullable=False)
-    actual_payout = Column(Float)
-    payout_cap = Column(Float)
+    actual_payout = Column(Float, nullable=True)
+    payout_cap = Column(Float, nullable=True)
     fraud_score = Column(Float, default=0)
-    fraud_tier = Column(String(10))
-    confidence_score = Column(Float)
-    fraud_signals = Column(JSON)
-    verification_method = Column(String(50))
-    status = Column(String(20), default="PENDING")
-    appeal_status = Column(String(20))
-    appeal_reason = Column(Text)
-    reviewed_by = Column(String(36), ForeignKey("workers.id"))
-    review_notes = Column(Text)
-    claimed_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    resolved_at = Column(DateTime)
-    paid_at = Column(DateTime)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    fraud_tier = Column(String, nullable=True)
+    confidence_score = Column(Float, nullable=True)
+    fraud_signals = Column(JSON, nullable=True)
+    verification_method = Column(String, nullable=True)
+    status = Column(String, default="PENDING")
+    appeal_status = Column(String, nullable=True)
+    appeal_reason = Column(String, nullable=True)
+    reviewed_by = Column(String, ForeignKey("workers.id"), nullable=True)
+    review_notes = Column(String, nullable=True)
+    claimed_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    paid_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     worker = relationship("Worker", back_populates="claims", foreign_keys=[worker_id])
+    reviewer = relationship("Worker", back_populates="reviewed_claims", foreign_keys=[reviewed_by])
     policy = relationship("Policy", back_populates="claims")
     trigger = relationship("Trigger", back_populates="claims")
     payout = relationship("Payout", back_populates="claim", uselist=False)
 
 
-# ============================================
-# PAYOUTS
-# ============================================
 class Payout(Base):
     __tablename__ = "payouts"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    claim_id = Column(String(36), ForeignKey("claims.id"), nullable=False)
-    worker_id = Column(String(36), ForeignKey("workers.id"), nullable=False)
+    id = Column(String, primary_key=True, default=generate_uuid)
+    claim_id = Column(String, ForeignKey("claims.id"), unique=True, nullable=False)
+    worker_id = Column(String, ForeignKey("workers.id"), nullable=False)
     amount = Column(Float, nullable=False)
-    upi_reference = Column(String(200))
-    payment_method = Column(String(50), default="UPI")
-    payment_status = Column(String(20), default="PENDING")
+    upi_reference = Column(String, nullable=True)
+    payment_method = Column(String, default="UPI")
+    payment_status = Column(String, default="PENDING")
     goodwill_credit = Column(Float, default=0)
-    paid_at = Column(DateTime)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    paid_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     claim = relationship("Claim", back_populates="payout")
     worker = relationship("Worker", back_populates="payouts")
 
 
-# ============================================
-# EARNINGS PATTERNS
-# ============================================
 class EarningsPattern(Base):
     __tablename__ = "earnings_patterns"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    worker_id = Column(String(36), ForeignKey("workers.id"), nullable=False)
+    id = Column(String, primary_key=True, default=generate_uuid)
+    worker_id = Column(String, ForeignKey("workers.id"), nullable=False)
     day_of_week = Column(Integer, nullable=False)
     hour_slot = Column(Integer, nullable=False)
     avg_earnings = Column(Float, default=0)
     order_count = Column(Integer, default=0)
     sample_weeks = Column(Integer, default=0)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-
-    __table_args__ = (UniqueConstraint("worker_id", "day_of_week", "hour_slot"),)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     worker = relationship("Worker", back_populates="earnings_patterns")
 
+    __table_args__ = (
+        UniqueConstraint("worker_id", "day_of_week", "hour_slot"),
+    )
 
-# ============================================
-# FRAUD RINGS
-# ============================================
+
 class FraudRing(Base):
     __tablename__ = "fraud_rings"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    ring_id = Column(String(100), nullable=False)
+    id = Column(String, primary_key=True, default=generate_uuid)
+    ring_id = Column(String, nullable=False)
     member_count = Column(Integer, nullable=False)
-    detection_method = Column(String(50))
-    center_latitude = Column(Float)
-    center_longitude = Column(Float)
-    radius_meters = Column(Integer)
+    detection_method = Column(String, nullable=True)
+    center_latitude = Column(Float, nullable=True)
+    center_longitude = Column(Float, nullable=True)
+    radius_meters = Column(Integer, nullable=True)
     member_worker_ids = Column(JSON, nullable=False)
-    shared_signals = Column(JSON)
-    status = Column(String(20), default="DETECTED")
+    shared_signals = Column(JSON, nullable=True)
+    status = Column(String, default="DETECTED")
     frozen_amount = Column(Float, default=0)
-    detected_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    resolved_at = Column(DateTime)
-    resolved_by = Column(String(36), ForeignKey("workers.id"))
-    notes = Column(Text)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    detected_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    resolved_by = Column(String, ForeignKey("workers.id"), nullable=True)
+    notes = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    resolver = relationship("Worker", back_populates="resolved_fraud_rings", foreign_keys=[resolved_by])
 
 
-# ============================================
-# AUDIT LOG
-# ============================================
 class AuditLog(Base):
     __tablename__ = "audit_log"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    entity_type = Column(String(50), nullable=False)
-    entity_id = Column(String(36), nullable=False)
-    action = Column(String(50), nullable=False)
-    actor_id = Column(String(36))
-    actor_role = Column(String(20))
-    previous_state = Column(JSON)
-    new_state = Column(JSON)
-    ip_address = Column(String(45))
-    device_fingerprint = Column(String(512))
-    entry_hash = Column(String(64), nullable=False)
-    previous_hash = Column(String(64))
-    metadata_ = Column("metadata", JSON)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    id = Column(String, primary_key=True, default=generate_uuid)
+    entity_type = Column(String, nullable=False)
+    entity_id = Column(String, nullable=False)
+    action = Column(String, nullable=False)
+    actor_id = Column(String, nullable=True)
+    actor_role = Column(String, nullable=True)
+    previous_state = Column(JSON, nullable=True)
+    new_state = Column(JSON, nullable=True)
+    ip_address = Column(String, nullable=True)
+    device_fingerprint = Column(String, nullable=True)
+    entry_hash = Column(String, nullable=False)
+    previous_hash = Column(String, nullable=True)
+    metadata_ = Column("metadata", JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
-# ============================================
-# OTP CODES
-# ============================================
 class OTPCode(Base):
     __tablename__ = "otp_codes"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    phone = Column(String(15), nullable=False)
-    otp_hash = Column(String(256), nullable=False)
+    id = Column(String, primary_key=True, default=generate_uuid)
+    phone = Column(String, nullable=False)
+    otp_hash = Column(String, nullable=False)
     attempts = Column(Integer, default=0)
     max_attempts = Column(Integer, default=3)
-    expires_at = Column(DateTime, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
     used = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
-# ============================================
-# MOVEMENT SIGNATURES
-# ============================================
 class MovementSignature(Base):
     __tablename__ = "movement_signatures"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    worker_id = Column(String(36), ForeignKey("workers.id"), nullable=False)
-    signature_date = Column(String(10), nullable=False)
-    avg_speed = Column(Float)
-    stop_count = Column(Integer)
-    route_complexity = Column(Float)
-    active_hours = Column(Float)
-    zones_visited = Column(JSON)
-    gps_points_count = Column(Integer)
-    altitude_variance = Column(Float)
-    accelerometer_activity = Column(Float)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-
-    __table_args__ = (UniqueConstraint("worker_id", "signature_date"),)
+    id = Column(String, primary_key=True, default=generate_uuid)
+    worker_id = Column(String, ForeignKey("workers.id"), nullable=False)
+    signature_date = Column(String, nullable=False)
+    avg_speed = Column(Float, nullable=True)
+    stop_count = Column(Integer, nullable=True)
+    route_complexity = Column(Float, nullable=True)
+    active_hours = Column(Float, nullable=True)
+    zones_visited = Column(JSON, nullable=True)
+    gps_points_count = Column(Integer, nullable=True)
+    altitude_variance = Column(Float, nullable=True)
+    accelerometer_activity = Column(Float, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     worker = relationship("Worker", back_populates="movement_signatures")
 
+    __table_args__ = (
+        UniqueConstraint("worker_id", "signature_date"),
+    )
 
-# ============================================
-# DATABASE ENGINE & SESSION
-# ============================================
-settings = get_settings()
 
-engine = create_async_engine(
-    settings.database_url,
-    echo=settings.debug,
-)
-
-async_session = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False
-)
-
+# ─── DB Helpers ──────────────────────────────────────────────────────────────
 
 async def init_db():
     """Create all tables."""
@@ -329,8 +329,13 @@ async def init_db():
         await conn.run_sync(Base.metadata.create_all)
 
 
-async def get_db() -> AsyncSession:
-    """Dependency to get database session."""
+async def close_db():
+    """Dispose the engine."""
+    await engine.dispose()
+
+
+async def get_db():
+    """FastAPI dependency — yields an AsyncSession."""
     async with async_session() as session:
         try:
             yield session
@@ -338,5 +343,3 @@ async def get_db() -> AsyncSession:
         except Exception:
             await session.rollback()
             raise
-        finally:
-            await session.close()

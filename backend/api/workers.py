@@ -4,7 +4,6 @@ Worker profile and trust score management
 """
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.database import Worker, get_db
 from backend.models.schemas import (
@@ -15,6 +14,7 @@ from backend.middleware.auth_middleware import get_current_user
 from backend.services.trust_score import TrustScoreService
 from backend.services.notification_service import NotificationService
 from backend.ml.earnings_dna import EarningsDNA
+from sqlalchemy import select
 
 router = APIRouter(prefix="/workers", tags=["Workers"])
 
@@ -25,13 +25,10 @@ async def get_profile(
     db: AsyncSession = Depends(get_db),
 ):
     """Get current worker's profile."""
-    result = await db.execute(
-        select(Worker).where(Worker.id == current_user["worker_id"])
-    )
+    result = await db.execute(select(Worker).where(Worker.id == current_user["worker_id"]))
     worker = result.scalar_one_or_none()
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
-
     return WorkerProfile.model_validate(worker)
 
 
@@ -42,9 +39,7 @@ async def update_profile(
     db: AsyncSession = Depends(get_db),
 ):
     """Update worker profile."""
-    result = await db.execute(
-        select(Worker).where(Worker.id == current_user["worker_id"])
-    )
+    result = await db.execute(select(Worker).where(Worker.id == current_user["worker_id"]))
     worker = result.scalar_one_or_none()
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
@@ -53,8 +48,8 @@ async def update_profile(
         worker.name = request.name
     if request.zone_code:
         worker.primary_zone_code = request.zone_code
-
     await db.flush()
+
     return MessageResponse(message="Profile updated successfully")
 
 
@@ -64,9 +59,7 @@ async def get_trust_score(
     db: AsyncSession = Depends(get_db),
 ):
     """Get worker's current trust score with breakdown."""
-    trust_data = await TrustScoreService.calculate_trust_score(
-        db, current_user["worker_id"]
-    )
+    trust_data = await TrustScoreService.calculate_trust_score(db, current_user["worker_id"])
     return TrustScoreResponse(
         worker_id=trust_data["worker_id"],
         trust_score=trust_data["trust_score"],
@@ -94,7 +87,5 @@ async def get_notifications(
     current_user: dict = Depends(get_current_user),
 ):
     """Get worker's notifications."""
-    notifications = NotificationService.get_notifications(
-        current_user["worker_id"]
-    )
+    notifications = NotificationService.get_notifications(current_user["worker_id"])
     return {"notifications": notifications}
