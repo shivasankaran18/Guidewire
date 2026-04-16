@@ -14,4 +14,6 @@ xgboost>=2.1.0
 pandas>=2.2.0
 python-dotenv>=1.0.1
 apscheduler>=3.10.4
-
+langgraph>=1.1.0
+langchain>=1.2.0
+langchain-cerebras>=0.8.0

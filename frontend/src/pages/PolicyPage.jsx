@@ -5,6 +5,7 @@ import LoadingSpinner from '../components/shared/LoadingSpinner'
 import ConfirmModal from '../components/shared/ConfirmModal'
 import { formatCurrency } from '../utils/formatCurrency'
 import { Shield, CheckCircle, Star, Zap, ArrowRight, Clock, AlertTriangle } from 'lucide-react'
+import api from '../utils/api'
 
 const tierIcons = { BASIC: Shield, STANDARD: Star, PREMIUM: Zap }
 const tierColors = {
@@ -22,9 +23,7 @@ export default function PolicyPage() {
   const [history, setHistory] = useState([])
 
   useEffect(() => {
-    import('../utils/api').then(({ default: api }) =>
-      api.get('/api/policies/history').then(r => setHistory(r.data)).catch(() => {})
-    )
+    api.get('/api/policies/history').then(r => setHistory(r.data)).catch(() => {})
   }, [])
 
   const handleActivate = async () => {

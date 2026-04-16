@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     razorpay_key_id: str = "rzp_test_mock"
     razorpay_key_secret: str = "mock_secret"
 
+    # AI Agents (Cerebras)
+    cerebras_api_key: str = ""
+
     # Mock mode
     use_mock_apis: bool = True
 
