@@ -15,6 +15,7 @@ from backend.middleware.rate_limiter import RateLimiterMiddleware
 from backend.api import (
     auth_router, policies_router, claims_router,
     triggers_router, workers_router, admin_router,
+    payouts_router,
 )
 from sqlalchemy import select
 
@@ -68,6 +69,7 @@ app.include_router(claims_router, prefix="/api")
 app.include_router(triggers_router, prefix="/api")
 app.include_router(workers_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
+app.include_router(payouts_router, prefix="/api")
 
 # Mock APIs (if enabled)
 if settings.use_mock_apis:
