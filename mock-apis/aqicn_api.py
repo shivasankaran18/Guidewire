@@ -9,9 +9,8 @@ from fastapi import APIRouter
 router = APIRouter(prefix="/mock/aqicn", tags=["Mock - AQICN"])
 
 
-@router.get("/feed")
-async def get_aqi(city: str = "chennai", zone_code: str = "CHN-VEL-4B"):
-    """Get AQI data for a city/zone."""
+async def get_mock_aqi(city: str = "chennai", zone_code: str = "CHN-VEL-4B"):
+    """Get mock AQI data for a city/zone."""
     has_severe_aqi = random.random() < 0.1
 
     if has_severe_aqi:
@@ -52,3 +51,9 @@ async def get_aqi(city: str = "chennai", zone_code: str = "CHN-VEL-4B"):
         },
         "_source": "mock_aqicn",
     }
+
+
+@router.get("/feed")
+async def get_aqi(city: str = "chennai", zone_code: str = "CHN-VEL-4B"):
+    """Get AQI data for a city/zone (mock only)."""
+    return await get_mock_aqi(city, zone_code)
