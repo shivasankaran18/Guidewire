@@ -55,6 +55,7 @@ class WorkerProfile(BaseModel):
     name: str
     platform: str
     platform_worker_id: str
+    email: Optional[str] = None
     aadhaar_last4: Optional[str] = None
     upi_id_masked: Optional[str] = None
     device_model: Optional[str] = None
@@ -75,9 +76,35 @@ class WorkerProfile(BaseModel):
 
 class WorkerUpdateRequest(BaseModel):
     name: Optional[str] = None
+    email: Optional[str] = None
     upi_id: Optional[str] = None
     zone_code: Optional[str] = None
     device_fingerprint: Optional[str] = None
+
+
+# ============================================
+# NOTIFICATION SCHEMAS
+# ============================================
+class NotificationItem(BaseModel):
+    id: str
+    title: str
+    message: str
+    type: str
+    data: dict = Field(default_factory=dict)
+    created_at: Optional[datetime] = None
+    read_at: Optional[datetime] = None
+
+
+class NotificationListResponse(BaseModel):
+    notifications: list[NotificationItem]
+
+
+class MarkReadResponse(BaseModel):
+    success: bool = True
+
+
+class UnreadCountResponse(BaseModel):
+    unread_count: int
 
 
 class TrustScoreResponse(BaseModel):

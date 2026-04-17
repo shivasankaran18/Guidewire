@@ -116,9 +116,13 @@ async def auto_claim(
         await db.flush()
 
         payout = await PayoutEngine.process_payout(db, claim.id, payout_calc["actual_payout"])
-        NotificationService.send_payout_notification(
-            current_user["worker_id"], payout_calc["actual_payout"],
-            trigger.trigger_type, fraud_analysis["confidence_score"],
+        await NotificationService.send_payout_notification(
+            db,
+            current_user["worker_id"],
+            payout_calc["actual_payout"],
+            trigger.trigger_type,
+            fraud_analysis["confidence_score"],
+            claim_id=claim.id,
         )
     else:
         claim.status = "PENDING"
@@ -161,8 +165,11 @@ async def appeal_claim(
         new_state={"reason": request.reason},
     )
 
-    NotificationService.send_claim_update(
-        current_user["worker_id"], claim_id, "APPEALED",
+    await NotificationService.send_claim_update(
+        db,
+        current_user["worker_id"],
+        claim_id,
+        "APPEALED",
         "Your appeal has been submitted. Manual review within 2 hours.",
     )
     return MessageResponse(message="Appeal submitted successfully. You'll hear back within 2 hours.")

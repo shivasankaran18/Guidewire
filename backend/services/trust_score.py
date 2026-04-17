@@ -6,6 +6,7 @@ Worker trust score computation & management
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.database import Worker, Claim
+from backend.services.notification_service import NotificationService
 
 
 class TrustScoreService:
@@ -98,6 +99,9 @@ class TrustScoreService:
             action_taken = "Account suspended. Legal report filed."
 
         await db.flush()
+
+        # Notify worker (inbox + email)
+        await NotificationService.send_fraud_warning(db, worker_id, worker.fraud_strikes)
         return {
             "worker_id": worker_id, "fraud_strikes": worker.fraud_strikes,
             "action_taken": action_taken, "account_status": worker.account_status,

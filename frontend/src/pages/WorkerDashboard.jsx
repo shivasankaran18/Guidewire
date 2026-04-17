@@ -7,6 +7,7 @@ import ZoneAlertBanner from '../components/dashboard/ZoneAlertBanner'
 import WeeklyReceipt from '../components/dashboard/WeeklyReceipt'
 import PoolHealthIndicator from '../components/dashboard/PoolHealthIndicator'
 import LoadingSpinner from '../components/shared/LoadingSpinner'
+import NotificationDrawer from '../components/shared/NotificationDrawer'
 import api from '../utils/api'
 import { formatCurrency } from '../utils/formatCurrency'
 import { Shield, Bell, Clock, MapPin } from 'lucide-react'
@@ -18,6 +19,7 @@ export default function WorkerDashboard() {
   const [triggers, setTriggers] = useState([])
   const [trustScore, setTrustScore] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [notifOpen, setNotifOpen] = useState(false)
 
   useEffect(() => { loadData() }, [])
 
@@ -56,11 +58,17 @@ export default function WorkerDashboard() {
             <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> Week of Apr 1–7</span>
           </div>
         </div>
-        <button className="mt-3 sm:mt-0 p-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all relative">
-          <Bell className="w-5 h-5 text-gray-400" />
-          {triggers.length > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-danger-500 text-[10px] text-white flex items-center justify-center">{triggers.length}</span>}
+        <button
+          onClick={() => setNotifOpen(true)}
+          className="mt-3 sm:mt-0 flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all"
+          title="Inbox"
+        >
+          <Bell className="w-5 h-5 text-gray-300" />
+          <span className="text-sm text-gray-200 hidden sm:inline">Inbox</span>
         </button>
       </div>
+
+      <NotificationDrawer isOpen={notifOpen} onClose={() => setNotifOpen(false)} />
 
       {/* Zone Alerts */}
       <div className="mb-6 animate-slide-in" style={{ animationDelay: '0.05s' }}>

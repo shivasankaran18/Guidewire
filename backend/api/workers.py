@@ -7,8 +7,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.database import Worker, get_db
 from backend.models.schemas import (
-    WorkerProfile, WorkerUpdateRequest, TrustScoreResponse,
-    MessageResponse, EarningsDNAResponse, EarningsDNASlot,
+    WorkerProfile,
+    WorkerUpdateRequest,
+    TrustScoreResponse,
+    MessageResponse,
+    EarningsDNAResponse,
+    EarningsDNASlot,
+    NotificationListResponse,
+    NotificationItem,
+    MarkReadResponse,
+    UnreadCountResponse,
 )
 from backend.middleware.auth_middleware import get_current_user
 from backend.services.trust_score import TrustScoreService
@@ -46,6 +54,8 @@ async def update_profile(
 
     if request.name:
         worker.name = request.name
+    if request.email is not None:
+        worker.email = request.email.strip() or None
     if request.zone_code:
         worker.primary_zone_code = request.zone_code
     await db.flush()
@@ -82,10 +92,43 @@ async def get_earnings_dna(
     return profile
 
 
-@router.get("/notifications")
+@router.get("/notifications", response_model=NotificationListResponse)
 async def get_notifications(
+    limit: int = 20,
     current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Get worker's notifications."""
-    notifications = NotificationService.get_notifications(current_user["worker_id"])
-    return {"notifications": notifications}
+    """Get worker's recent notifications (durable)."""
+    items = await NotificationService.get_notifications(db, current_user["worker_id"], limit=limit)
+    return NotificationListResponse(notifications=[NotificationItem(**n) for n in items])
+
+
+@router.post("/notifications/{notification_id}/read", response_model=MarkReadResponse)
+async def mark_notification_read(
+    notification_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Mark a notification as read."""
+    await NotificationService.mark_read(db, current_user["worker_id"], notification_id)
+    return MarkReadResponse(success=True)
+
+
+@router.post("/notifications/read-all", response_model=MarkReadResponse)
+async def mark_all_notifications_read(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Mark all worker notifications as read."""
+    await NotificationService.mark_all_read(db, current_user["worker_id"])
+    return MarkReadResponse(success=True)
+
+
+@router.get("/notifications/unread-count", response_model=UnreadCountResponse)
+async def get_unread_notifications_count(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get worker's unread notification count (for UI badges)."""
+    count = await NotificationService.get_unread_count(db, current_user["worker_id"])
+    return UnreadCountResponse(unread_count=count)

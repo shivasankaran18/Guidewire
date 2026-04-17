@@ -9,8 +9,16 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import (
-    Boolean, Column, DateTime, Float, Integer, String, Text, ForeignKey, JSON,
-    UniqueConstraint, create_engine
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    Integer,
+    String,
+    Text,
+    ForeignKey,
+    JSON,
+    UniqueConstraint,
 )
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import DeclarativeBase, relationship, Mapped, mapped_column
@@ -93,6 +101,7 @@ class Worker(Base):
     aadhaar_hash = Column(String, nullable=True)
     upi_id_hash = Column(String, nullable=True)
     upi_id_masked = Column(String, nullable=True)
+    email = Column(String, nullable=True)
     selfie_hash = Column(String, nullable=True)
     device_fingerprint = Column(String, nullable=True)
     device_model = Column(String, nullable=True)
@@ -119,6 +128,7 @@ class Worker(Base):
     payouts = relationship("Payout", back_populates="worker")
     earnings_patterns = relationship("EarningsPattern", back_populates="worker")
     movement_signatures = relationship("MovementSignature", back_populates="worker")
+    notifications = relationship("Notification", back_populates="worker")
 
 
 class Policy(Base):
@@ -285,6 +295,45 @@ class AuditLog(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    worker_id = Column(String, ForeignKey("workers.id"), nullable=False)
+    type = Column(String, nullable=False)  # INFO, WARNING, ALERT, PAYOUT, COVERAGE
+    title = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+    data = Column(JSON, nullable=True)
+    source_type = Column(String, nullable=True)
+    source_id = Column(String, nullable=True)
+    dedupe_key = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    read_at = Column(DateTime(timezone=True), nullable=True)
+
+    worker = relationship("Worker", back_populates="notifications")
+    deliveries = relationship("NotificationDelivery", back_populates="notification")
+
+    __table_args__ = (
+        UniqueConstraint("worker_id", "dedupe_key", name="uq_worker_notification_dedupe"),
+    )
+
+
+class NotificationDelivery(Base):
+    __tablename__ = "notification_deliveries"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    notification_id = Column(String, ForeignKey("notifications.id"), nullable=False)
+    channel = Column(String, nullable=False)  # INBOX, EMAIL
+    status = Column(String, default="PENDING", nullable=False)  # PENDING, SENT, FAILED, SKIPPED
+    attempts = Column(Integer, default=0, nullable=False)
+    last_error = Column(Text, nullable=True)
+    next_attempt_at = Column(DateTime(timezone=True), nullable=True)
+    sent_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    notification = relationship("Notification", back_populates="deliveries")
+
+
 class OTPCode(Base):
     __tablename__ = "otp_codes"
 
@@ -324,7 +373,11 @@ class MovementSignature(Base):
 # ─── DB Helpers ──────────────────────────────────────────────────────────────
 
 async def init_db():
-    """Create all tables."""
+    """Create all tables.
+
+    Note: This is safe for sqlite dev/test usage, but it is NOT a migration
+    system for production Postgres. Prefer SQL migrations under `database/`.
+    """
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

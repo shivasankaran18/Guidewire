@@ -13,6 +13,8 @@ ALTER TABLE earnings_patterns ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fraud_rings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE movement_signatures ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notification_deliveries ENABLE ROW LEVEL SECURITY;
 
 -- ============================================
 -- WORKERS RLS
@@ -158,5 +160,29 @@ CREATE POLICY movement_select_own ON movement_signatures
 -- Admins can read all movement data
 CREATE POLICY movement_admin_select ON movement_signatures
     FOR SELECT USING (
+        EXISTS (SELECT 1 FROM workers WHERE id = auth.uid() AND role IN ('ADMIN', 'SUPER_ADMIN'))
+    );
+
+-- ============================================
+-- NOTIFICATIONS RLS
+-- ============================================
+-- Workers can read their own notifications
+CREATE POLICY notifications_select_own ON notifications
+    FOR SELECT USING (worker_id = auth.uid());
+
+-- Workers can update their own notifications (mark read)
+CREATE POLICY notifications_update_own ON notifications
+    FOR UPDATE USING (worker_id = auth.uid())
+    WITH CHECK (worker_id = auth.uid());
+
+-- Admins can read all notifications
+CREATE POLICY notifications_admin_select ON notifications
+    FOR SELECT USING (
+        EXISTS (SELECT 1 FROM workers WHERE id = auth.uid() AND role IN ('ADMIN', 'SUPER_ADMIN'))
+    );
+
+-- Notification deliveries: admins only (system job)
+CREATE POLICY notification_deliveries_admin_only ON notification_deliveries
+    FOR ALL USING (
         EXISTS (SELECT 1 FROM workers WHERE id = auth.uid() AND role IN ('ADMIN', 'SUPER_ADMIN'))
     );

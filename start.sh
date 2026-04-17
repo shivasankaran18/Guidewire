@@ -53,6 +53,16 @@ USE_MOCK_APIS=true
 DEBUG=true
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 VITE_API_BASE_URL=http://localhost:8000
+
+# Email (SMTP)
+# Gmail recommended settings (use an App Password for SMTP_PASSWORD)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_STARTTLS=true
+SMTP_USER=
+SMTP_PASSWORD=
+# For Gmail, keep FROM equal to SMTP_USER (or a configured alias)
+SMTP_FROM=
 EOF
         echo -e "${GREEN}[OK] .env file created${NC}"
     fi

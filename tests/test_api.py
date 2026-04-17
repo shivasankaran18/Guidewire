@@ -53,6 +53,13 @@ class TestWorkerProfile:
         assert "trust_score" in data
         assert "fraud_strikes" in data
 
+    async def test_get_notifications(self, client, worker_headers):
+        """Test notifications endpoint returns list."""
+        response = await client.get("/api/workers/notifications", headers=worker_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert "notifications" in data
+
 
 class TestPolicies:
     """Test policy endpoints."""

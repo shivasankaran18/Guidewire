@@ -129,9 +129,13 @@ async def resolve_claim(
             claim.appeal_status = "APPROVED"
 
         payout = await PayoutEngine.process_payout(db, claim_id, claim.calculated_payout, goodwill)
-        NotificationService.send_payout_notification(
-            claim.worker_id, claim.calculated_payout + goodwill,
-            claim.claim_type, claim.confidence_score or 85,
+        await NotificationService.send_payout_notification(
+            db,
+            claim.worker_id,
+            claim.calculated_payout + goodwill,
+            claim.claim_type,
+            claim.confidence_score or 85,
+            claim_id=claim_id,
         )
         message = f"Claim approved. ₹{claim.calculated_payout + goodwill:,.0f} sent to worker."
     else:
@@ -145,8 +149,11 @@ async def resolve_claim(
         if claim.fraud_tier == "RED":
             await TrustScoreService.apply_strike(db, claim.worker_id, "Claim rejected by admin review")
 
-        NotificationService.send_claim_update(
-            claim.worker_id, claim_id, "REJECTED",
+        await NotificationService.send_claim_update(
+            db,
+            claim.worker_id,
+            claim_id,
+            "REJECTED",
             f"Your claim was not approved. Reason: {request.notes or 'Fraud indicators detected'}. You can appeal within 48 hours.",
         )
         message = "Claim rejected."
@@ -249,6 +256,21 @@ async def freeze_fraud_ring_accounts(
     msg = f"Frozen {frozen_count} worker accounts for ring {request.ring_id}."
     if missing_count:
         msg += f" {missing_count} member IDs not found in database."
+
+    # Notify affected workers (best-effort)
+    for w in workers:
+        await NotificationService.create_notification(
+            db,
+            w.id,
+            title="Account Suspended",
+            message=f"Your account was suspended due to suspected fraud ring activity (ring {request.ring_id}). Contact support if you believe this is an error.",
+            type="WARNING",
+            data={"ring_id": request.ring_id, "action": "SUSPENDED"},
+            source_type="FRAUD_RING",
+            source_id=request.ring_id,
+            dedupe_key=f"fraud_ring_frozen:{request.ring_id}",
+            send_email=True,
+        )
 
     return MessageResponse(message=msg, success=(frozen_count > 0))
 

@@ -44,6 +44,7 @@ CREATE TABLE workers (
     aadhaar_hash VARCHAR(256),                       -- SHA-256 hash of full Aadhaar
     upi_id_hash VARCHAR(256),                        -- Hashed UPI ID (never plaintext)
     upi_id_masked VARCHAR(50),                       -- e.g., "ravi****@upi"
+    email VARCHAR(320),                              -- Optional email for notifications
     selfie_hash VARCHAR(256),                        -- Liveness check hash
     device_fingerprint VARCHAR(512),                 -- Unique device identifier
     device_model VARCHAR(200),
@@ -62,6 +63,50 @@ CREATE TABLE workers (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- ============================================
+-- NOTIFICATIONS TABLE
+-- Durable inbox + delivery tracking
+-- ============================================
+CREATE TABLE notifications (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    worker_id UUID NOT NULL REFERENCES workers(id),
+    type VARCHAR(50) NOT NULL,                       -- INFO, WARNING, ALERT, PAYOUT, COVERAGE
+    title VARCHAR(200) NOT NULL,
+    message TEXT NOT NULL,
+    data JSONB,
+    source_type VARCHAR(50),
+    source_id VARCHAR(100),
+    dedupe_key VARCHAR(200),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    read_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE UNIQUE INDEX uq_worker_notification_dedupe
+  ON notifications(worker_id, dedupe_key)
+  WHERE dedupe_key IS NOT NULL;
+
+CREATE INDEX idx_notifications_worker_created
+  ON notifications(worker_id, created_at DESC);
+
+CREATE INDEX idx_notifications_worker_unread
+  ON notifications(worker_id)
+  WHERE read_at IS NULL;
+
+CREATE TABLE notification_deliveries (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    notification_id UUID NOT NULL REFERENCES notifications(id) ON DELETE CASCADE,
+    channel VARCHAR(20) NOT NULL,                    -- INBOX, EMAIL
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',   -- PENDING, SENT, FAILED, SKIPPED
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    next_attempt_at TIMESTAMP WITH TIME ZONE,
+    sent_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_notification_deliveries_pending
+  ON notification_deliveries(channel, status, next_attempt_at, created_at);
 
 -- ============================================
 -- POLICIES TABLE
@@ -276,3 +321,4 @@ CREATE INDEX idx_audit_hash ON audit_log(entry_hash);
 CREATE INDEX idx_otp_phone ON otp_codes(phone);
 CREATE INDEX idx_earnings_worker ON earnings_patterns(worker_id);
 CREATE INDEX idx_movement_worker ON movement_signatures(worker_id);
+CREATE INDEX idx_notifications_worker ON notifications(worker_id);

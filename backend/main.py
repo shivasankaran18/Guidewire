@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.config.settings import get_settings
 from backend.models.database import init_db, close_db, async_session, Zone
 from backend.middleware.rate_limiter import RateLimiterMiddleware
+from backend.services.scheduler import start_scheduler
 from backend.api import (
     auth_router, policies_router, claims_router,
     triggers_router, workers_router, admin_router,
@@ -38,7 +39,16 @@ async def lifespan(app: FastAPI):
             await session.commit()
             print("🌍 Seeded default zones")
 
+    # Start background scheduler (leader-only in multi-instance)
+    scheduler = start_scheduler()
+
     yield
+
+    try:
+        if scheduler and scheduler.running:
+            scheduler.shutdown(wait=False)
+    except Exception:
+        pass
     await close_db()
     print("🛡️ GigPulse Sentinel Backend Shutting Down")
 

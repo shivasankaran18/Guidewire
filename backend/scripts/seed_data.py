@@ -18,8 +18,9 @@ import uuid
 async def seed_database():
     print("🌱 Starting GigPulse Sentinel Database Seeding...")
 
-    # Ensure tables exist
-    await init_db()
+    # Ensure tables exist (sqlite dev only). For Postgres, apply SQL migrations under `database/`.
+    if engine.url.get_backend_name() == "sqlite":
+        await init_db()
 
     async with async_session() as session:
         # Check if already seeded (by checking if any worker exists)

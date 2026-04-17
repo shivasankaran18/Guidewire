@@ -172,6 +172,7 @@ async def demo_login(db: AsyncSession = Depends(get_db)):
             id=str(uuid.uuid4()), phone=demo_phone, name="Ravi Kumar",
             platform="zomato", platform_worker_id="ZW123456",
             aadhaar_last4="4321", upi_id_masked="ravi****@upi",
+            email="ravi@example.com",
             primary_zone_code="CHN-VEL-4B",
             avg_daily_earnings=700, avg_weekly_earnings=4200,
             tenure_weeks=24, trust_score=78.5,
@@ -201,6 +202,7 @@ async def demo_admin_login(db: AsyncSession = Depends(get_db)):
         worker = Worker(
             id=str(uuid.uuid4()), phone=admin_phone, name="Admin Priya",
             platform="zomato", platform_worker_id="ADMIN001",
+            email="admin@example.com",
             primary_zone_code="CHN-ANN-2A",
             trust_score=100, account_status="ACTIVE", role="ADMIN",
         )
