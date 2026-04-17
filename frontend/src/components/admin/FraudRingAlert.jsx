@@ -1,20 +1,83 @@
 import { useState, useEffect } from 'react'
 import api from '../../utils/api'
 import { AlertTriangle, MapPin, Users, Radio, Shield } from 'lucide-react'
+import ConfirmModal from '../shared/ConfirmModal'
 
 export default function FraudRingAlert() {
   const [rings, setRings] = useState([])
   const [loading, setLoading] = useState(true)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [selectedRing, setSelectedRing] = useState(null)
+  const [actionLoading, setActionLoading] = useState(false)
 
   useEffect(() => {
-    api.get('/api/admin/fraud-rings')
-      .then(r => setRings(r.data?.live_detection || r.data?.stored_rings || []))
-      .catch(() => {})
-      .finally(() => setLoading(false))
+    loadRings()
   }, [])
 
+  const loadRings = async () => {
+    setLoading(true)
+    try {
+      const r = await api.get('/api/admin/fraud-rings')
+      setRings(r.data?.live_detection || r.data?.stored_rings || [])
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const normalizeRing = (ring, index) => {
+    if (!ring || typeof ring !== 'object') return null
+    const memberIds = Array.isArray(ring.member_worker_ids)
+      ? ring.member_worker_ids
+      : (Array.isArray(ring.member_ids) ? ring.member_ids : [])
+    const detectionMethods = ring.detection_methods || (ring.detection_method ? [ring.detection_method] : [])
+    const sharedZones = ring.shared_signals?.home_zones || ring.shared_signals?.homeZones
+
+    return {
+      cluster_id: ring.cluster_id !== undefined ? ring.cluster_id : index,
+      ring_id: ring.ring_id,
+      member_count: ring.member_count,
+      confidence: ring.confidence,
+      severity: ring.severity,
+      center_latitude: ring.center_latitude,
+      center_longitude: ring.center_longitude,
+      radius_meters: ring.radius_meters,
+      member_ids: Array.isArray(memberIds) ? memberIds : [],
+      home_zones: Array.isArray(ring.home_zones) ? ring.home_zones : (Array.isArray(sharedZones) ? sharedZones : []),
+      detection_methods: Array.isArray(detectionMethods) ? detectionMethods : [],
+      timing_spread_seconds: ring.timing_spread_seconds,
+      raw: ring,
+    }
+  }
+
+  const handleFreezeClick = (ring) => {
+    setSelectedRing(ring)
+    setConfirmOpen(true)
+  }
+
+  const confirmFreeze = async () => {
+    if (!selectedRing) return
+    setActionLoading(true)
+    try {
+      await api.post('/api/admin/fraud-rings/freeze', {
+        ring_id: selectedRing.ring_id,
+        member_worker_ids: selectedRing.member_ids,
+        notes: 'Frozen via Admin UI',
+      })
+      setConfirmOpen(false)
+      setSelectedRing(null)
+      await loadRings()
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Failed to freeze ring accounts')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   // Demo data if empty
-  const data = rings.length ? rings : [
+  const normalized = (rings || []).map(normalizeRing).filter(Boolean)
+  const data = normalized.length ? normalized : [
     {
       cluster_id: 0, member_count: 7, confidence: 85, severity: 'CRITICAL',
       center_latitude: 12.9815, center_longitude: 80.2180, radius_meters: 87,
@@ -22,6 +85,7 @@ export default function FraudRingAlert() {
       home_zones: ['CHN-VEL-4B', 'CHN-ANN-2A', 'BLR-KOR-1A'],
       detection_methods: ['SPATIAL_CLUSTER', 'TIMING_SYNC', 'IP_CORRELATION'],
       timing_spread_seconds: 12.5,
+      ring_id: 'demo-ring',
     },
   ]
 
@@ -46,7 +110,9 @@ export default function FraudRingAlert() {
             </div>
             <div className="text-right">
               <span className={ring.severity === 'CRITICAL' ? 'badge-red' : 'badge-amber'}>{ring.severity}</span>
-              <p className="text-xs text-gray-400 mt-1">{ring.confidence}% confidence</p>
+              {ring.confidence !== undefined && ring.confidence !== null && (
+                <p className="text-xs text-gray-400 mt-1">{ring.confidence}% confidence</p>
+              )}
             </div>
           </div>
 
@@ -88,11 +154,27 @@ export default function FraudRingAlert() {
           </div>
 
           <div className="flex gap-3 mt-4">
-            <button className="btn-danger flex-1 text-sm py-2">🔒 Freeze Ring Accounts</button>
+            <button
+              className="btn-danger flex-1 text-sm py-2"
+              onClick={() => handleFreezeClick(ring)}
+              disabled={actionLoading}
+            >
+              {actionLoading ? 'Freezing...' : '🔒 Freeze Ring Accounts'}
+            </button>
             <button className="btn-secondary flex-1 text-sm py-2">📋 Export Report</button>
           </div>
         </div>
       ))}
+
+      <ConfirmModal
+        isOpen={confirmOpen}
+        title="Freeze Ring Accounts"
+        message={`This will suspend ${selectedRing?.member_count || 0} worker accounts associated with this ring. Continue?`}
+        confirmText="Freeze"
+        danger
+        onCancel={() => { if (!actionLoading) { setConfirmOpen(false); setSelectedRing(null) } }}
+        onConfirm={confirmFreeze}
+      />
     </div>
   )
 }
