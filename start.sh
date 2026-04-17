@@ -1,11 +1,12 @@
 #!/bin/bash
 
-# LaborGuard - Complete Startup Script
+# GigPulse Sentinel - Complete Startup Script
 # This script starts all services in the correct order
 
 set -e  # Exit on any error
 
-echo "🛡️  LaborGuard - Startup Script"
+echo "======================================================"
+echo "🛡️  GigPulse Sentinel - Startup Script"
 echo "======================================================"
 echo ""
 
@@ -16,10 +17,18 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+pause_if_interactive() {
+    # Match start.bat pause behavior when the script runs in an interactive shell.
+    if [ -t 0 ]; then
+        read -r -p "Press Enter to continue..." _
+    fi
+}
+
 # Check if Docker is running
 if ! docker info >/dev/null 2>&1; then
     echo -e "${RED}❌ Error: Docker is not running!${NC}"
     echo "Please start Docker Desktop and try again."
+    pause_if_interactive
     exit 1
 fi
 echo -e "${GREEN}[OK] Docker is running${NC}"
@@ -27,18 +36,19 @@ echo ""
 
 # Check if .env exists
 if [ ! -f ".env" ]; then
-    echo -e "${YELLOW}[INFO] .env file not found. Creating from template...${NC}"
+    echo -e "${RED}[ERROR] .env file not found!${NC}"
+    echo "Creating .env file from template..."
     if [ -f ".env.example" ]; then
         cp .env.example .env
         echo -e "${GREEN}[OK] .env file created from .env.example${NC}"
     else
         cat > .env << 'EOF'
-# LaborGuard Environment Variables
+# GigPulse Sentinel Environment Variables
 SECRET_KEY=dev-secret-key-change-in-production
 JWT_SECRET=dev-jwt-secret-change-in-production
 JWT_ALGORITHM=HS256
 JWT_EXPIRY_HOURS=24
-DATABASE_URL=sqlite+aiosqlite:///./laborguard.db
+DATABASE_URL=sqlite+aiosqlite:///./gigpulsesentinel.db
 USE_MOCK_APIS=true
 DEBUG=true
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
@@ -63,9 +73,11 @@ fi
 echo ""
 
 echo -e "${BLUE}Step 3/5: Building Docker images...${NC}"
+echo "Building backend and frontend..."
 docker-compose build backend frontend
 if [ $? -ne 0 ]; then
     echo -e "${RED}[ERROR] Failed to build Docker images!${NC}"
+    pause_if_interactive
     exit 1
 fi
 echo -e "${GREEN}[OK] Docker images built successfully${NC}"
@@ -73,12 +85,22 @@ echo ""
 
 echo -e "${BLUE}Step 4/5: Starting backend...${NC}"
 docker-compose up -d backend
+if [ $? -ne 0 ]; then
+    echo -e "${RED}[ERROR] Failed to start backend service.${NC}"
+    pause_if_interactive
+    exit 1
+fi
 echo -e "${YELLOW}⏳ Waiting for backend to be ready (10 seconds)...${NC}"
 sleep 10
 echo ""
 
 echo -e "${BLUE}Step 5/5: Starting frontend...${NC}"
 docker-compose up -d frontend
+if [ $? -ne 0 ]; then
+    echo -e "${RED}[ERROR] Failed to start frontend service.${NC}"
+    pause_if_interactive
+    exit 1
+fi
 echo ""
 
 # Verify services are running
@@ -107,3 +129,5 @@ echo ""
 echo "🔄 To restart:"
 echo "   docker-compose restart"
 echo ""
+
+pause_if_interactive

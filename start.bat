@@ -1,9 +1,10 @@
 @echo off
-REM LaborGuard - Windows Startup Script
+setlocal EnableExtensions
+REM GigPulse Sentinel - Windows Startup Script
 
 echo.
 echo ===============================================
-echo   🛡️  LaborGuard
+echo   GigPulse Sentinel
 echo   Windows Startup Script
 echo ===============================================
 echo.
@@ -30,19 +31,20 @@ echo.
 
 REM Check if .env exists
 if not exist ".env" (
-    echo [INFO] .env file not found. Creating from .env.example...
+    echo [ERROR] .env file not found!
+    echo Creating .env file from template...
     if exist ".env.example" (
         copy .env.example .env >nul
         echo [OK] .env file created from .env.example
     ) else (
         echo Creating default .env file...
         (
-            echo # LaborGuard Environment Variables
+            echo # GigPulse Sentinel Environment Variables
             echo SECRET_KEY=dev-secret-key-change-in-production
             echo JWT_SECRET=dev-jwt-secret-change-in-production
             echo JWT_ALGORITHM=HS256
             echo JWT_EXPIRY_HOURS=24
-            echo DATABASE_URL=sqlite+aiosqlite:///./laborguard.db
+            echo DATABASE_URL=sqlite+aiosqlite:///./gigpulsesentinel.db
             echo USE_MOCK_APIS=true
             echo DEBUG=true
             echo CORS_ORIGINS=http://localhost:5173,http://localhost:3000
@@ -58,34 +60,47 @@ docker-compose down 2>nul
 echo.
 
 echo Step 2/5: Ensuring Docker volume exists...
-docker volume inspect laborguard_backend_data >nul 2>&1
+set "VOLUME_NAME=gigpulsesentinel_backend_data"
+docker volume inspect %VOLUME_NAME% >nul 2>&1
 if errorlevel 1 (
-    docker volume create laborguard_backend_data >nul
-    echo [OK] Created volume: laborguard_backend_data
+    docker volume create %VOLUME_NAME% >nul
+    echo [OK] Created volume: %VOLUME_NAME%
 ) else (
-    echo [OK] Volume exists: laborguard_backend_data
+    echo [OK] Volume exists: %VOLUME_NAME%
 )
 echo.
 
 echo Step 3/5: Building Docker images...
 echo Building backend and frontend...
 docker-compose build backend frontend
-if errorlevel 1 (
-    echo [ERROR] Failed to build Docker images!
+set "BUILD_EXIT=%ERRORLEVEL%"
+if not "%BUILD_EXIT%"=="0" (
+    echo [ERROR] docker-compose build exited with code %BUILD_EXIT%!
+    echo [ERROR] Failed to build backend/frontend images.
     pause
-    exit /b 1
+    exit /b %BUILD_EXIT%
 )
 echo [OK] Docker images built successfully
 echo.
 
 echo Step 4/5: Starting backend...
 docker-compose up -d backend
+if errorlevel 1 (
+    echo [ERROR] Failed to start backend service.
+    pause
+    exit /b 1
+)
 echo Waiting for backend to be ready (10 seconds)...
 timeout /t 10 /nobreak >nul
 echo.
 
 echo Step 5/5: Starting frontend...
 docker-compose up -d frontend
+if errorlevel 1 (
+    echo [ERROR] Failed to start frontend service.
+    pause
+    exit /b 1
+)
 echo.
 
 REM Verify services are running
@@ -94,7 +109,7 @@ docker-compose ps
 echo.
 
 echo ===============================================
-echo   ✅ All services started successfully!
+echo   All services started successfully!
 echo ===============================================
 echo.
 echo Service URLs:
