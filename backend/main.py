@@ -23,12 +23,21 @@ from sqlalchemy import select
 settings = get_settings()
 
 
+def _database_label(database_url: str) -> str:
+    url = (database_url or "").lower()
+    if url.startswith("sqlite"):
+        return "SQLite"
+    if "postgres" in url:
+        return "PostgreSQL"
+    return "Unknown"
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifecycle - initialize DB on startup."""
     await init_db()
     print("🛡️ GigPulse Sentinel Backend Started")
-    print(f"📊 Database: PostgreSQL (Neon)")
+    print(f"📊 Database: {_database_label(settings.database_url)}")
     print(f"🔧 Mock APIs: {'Enabled' if settings.use_mock_apis else 'Disabled'}")
 
     # Seed zones on startup

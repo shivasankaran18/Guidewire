@@ -4,7 +4,7 @@ services:
     image: gigpulsesentinel/backend:latest
     container_name: gigpulsesentinel_backend
     environment:
-      DATABASE_URL: sqlite+aiosqlite:///./gigpulsesentinel.db
+      DATABASE_URL: ${DATABASE_URL:-sqlite+aiosqlite:///./gigpulsesentinel.db}
       SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-production}
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
       JWT_ALGORITHM: HS256
