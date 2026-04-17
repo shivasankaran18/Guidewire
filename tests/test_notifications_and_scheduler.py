@@ -62,6 +62,9 @@ async def test_email_delivery_processor_marks_sent(monkeypatch, client, worker_h
 
     def fake_send_email(msg):
         sent_to.append(msg.to)
+        assert msg.subject
+        assert msg.text
+        assert msg.html  # HTML template should be present
 
     monkeypatch.setattr(NotificationService, "_send_email", staticmethod(fake_send_email))
 

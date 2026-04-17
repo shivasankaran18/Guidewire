@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import html
 import json
 import smtplib
 from email.message import EmailMessage
@@ -38,7 +39,8 @@ def _as_iso(dt: datetime | None) -> str | None:
 class OutboxEmail:
     to: str
     subject: str
-    body: str
+    text: str
+    html: str | None = None
 
 
 class NotificationService:
@@ -339,11 +341,13 @@ class NotificationService:
 
             try:
                 d.attempts = int(d.attempts or 0) + 1
+                text_body, html_body = NotificationService._render_email(notif)
                 NotificationService._send_email(
                     OutboxEmail(
                         to=to_addr,
                         subject=f"GigPulse Sentinel: {notif.title}",
-                        body=NotificationService._render_email_body(notif),
+                        text=text_body,
+                        html=html_body,
                     )
                 )
                 d.status = "SENT"
@@ -363,15 +367,94 @@ class NotificationService:
         return {"sent": sent, "failed": failed, "skipped": skipped, "scanned": len(deliveries)}
 
     @staticmethod
-    def _render_email_body(notif: Notification) -> str:
+    def _render_email(notif: Notification) -> tuple[str, str]:
+        """Render a nice-looking email.
+
+        Returns (text, html).
+        """
+
         data = notif.data or {}
+
+        # Plain text fallback
         extra = ""
         try:
-            extra = "\n\nDetails:\n" + json.dumps(data, indent=2, ensure_ascii=True)
+            if data:
+                extra = "\n\nDetails:\n" + json.dumps(data, indent=2, ensure_ascii=True)
         except Exception:
             extra = ""
+        text_body = f"{notif.title}\n\n{notif.message}{extra}\n"
 
-        return f"{notif.title}\n\n{notif.message}{extra}\n"
+        # HTML version (inline styles for email client compatibility)
+        title = html.escape(notif.title or "")
+        message = html.escape(notif.message or "").replace("\n", "<br/>")
+        ntype = html.escape((notif.type or "INFO").upper())
+
+        badge_bg = {
+            "PAYOUT": "#16a34a",
+            "WARNING": "#dc2626",
+            "ALERT": "#ea580c",
+            "COVERAGE": "#1d5fd8",
+        }.get(ntype, "#334155")
+
+        # Show key details without dumping raw JSON by default.
+        detail_rows = []
+        if isinstance(data, dict):
+            if data.get("amount") is not None:
+                detail_rows.append(("Amount", f"₹{float(data['amount']):,.0f}"))
+            if data.get("trigger"):
+                detail_rows.append(("Trigger", str(data["trigger"])))
+            if data.get("status"):
+                detail_rows.append(("Status", str(data["status"])))
+            if data.get("confidence") is not None:
+                try:
+                    detail_rows.append(("Confidence", f"{float(data['confidence']):.0f}%"))
+                except Exception:
+                    detail_rows.append(("Confidence", str(data["confidence"])))
+            if data.get("claim_id"):
+                detail_rows.append(("Claim", str(data["claim_id"])))
+
+        details_html = ""
+        if detail_rows:
+            rows = "".join(
+                f"<tr>"
+                f"<td style='padding:6px 10px;color:#94a3b8;font-size:12px'>{html.escape(k)}</td>"
+                f"<td style='padding:6px 10px;color:#e2e8f0;font-size:12px;font-weight:600;text-align:right'>{html.escape(v)}</td>"
+                f"</tr>"
+                for (k, v) in detail_rows
+            )
+            details_html = (
+                "<table role='presentation' width='100%' cellspacing='0' cellpadding='0' "
+                "style='margin-top:14px;border:1px solid rgba(255,255,255,0.10);border-radius:14px;overflow:hidden'>"
+                f"{rows}"
+                "</table>"
+            )
+
+        html_body = f"""<!doctype html>
+<html>
+  <head>
+    <meta charset='utf-8' />
+    <meta name='viewport' content='width=device-width,initial-scale=1' />
+    <title>{title}</title>
+  </head>
+  <body style='margin:0;background:#0b1224;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#e2e8f0'>
+    <div style='max-width:640px;margin:0 auto;padding:24px'>
+      <div style='padding:18px 18px;border:1px solid rgba(255,255,255,0.12);border-radius:18px;background:rgba(255,255,255,0.04)'>
+        <div style='display:flex;align-items:center;justify-content:space-between;gap:12px'>
+          <div style='font-size:14px;letter-spacing:0.02em;color:#93c5fd;font-weight:700'>GigPulse Sentinel</div>
+          <div style='font-size:11px;padding:6px 10px;border-radius:999px;background:{badge_bg};color:#ffffff;font-weight:700'>{ntype}</div>
+        </div>
+        <div style='margin-top:14px;font-size:20px;line-height:1.25;font-weight:800;color:#ffffff'>{title}</div>
+        <div style='margin-top:10px;font-size:14px;line-height:1.6;color:#cbd5e1'>{message}</div>
+        {details_html}
+      </div>
+      <div style='margin-top:14px;font-size:11px;color:#64748b;line-height:1.5'>
+        You're receiving this because notifications are enabled for your GigPulse Sentinel account.
+      </div>
+    </div>
+  </body>
+</html>"""
+
+        return text_body, html_body
 
     @staticmethod
     def _send_email(msg: OutboxEmail) -> None:
@@ -389,7 +472,9 @@ class NotificationService:
         email["From"] = from_addr
         email["To"] = msg.to
         email["Subject"] = msg.subject
-        email.set_content(msg.body)
+        email.set_content(msg.text)
+        if msg.html:
+            email.add_alternative(msg.html, subtype="html")
 
         with smtplib.SMTP(host=host, port=port, timeout=10) as server:
             if use_tls:
