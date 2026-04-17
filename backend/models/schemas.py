@@ -235,6 +235,7 @@ class FraudRingResponse(BaseModel):
     center_longitude: Optional[float] = None
     radius_meters: Optional[int] = None
     member_worker_ids: list[str]
+    shared_signals: Optional[dict] = None
     status: str
     frozen_amount: float
     detected_at: Optional[datetime] = None

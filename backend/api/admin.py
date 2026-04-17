@@ -4,7 +4,10 @@ Dashboard, claim review, fraud ring management
 """
 
 from datetime import datetime, timezone
+import uuid
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+from typing import Optional
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.database import (
@@ -23,6 +26,12 @@ from backend.services.audit_logger import AuditLogger
 from backend.ml.synthetic_data import SyntheticDataGenerator
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
+
+
+class FreezeFraudRingRequest(BaseModel):
+    ring_id: str
+    member_worker_ids: list[str] = Field(default_factory=list)
+    notes: Optional[str] = None
 
 
 @router.get("/dashboard")
@@ -168,6 +177,82 @@ async def get_fraud_rings(
     }
 
 
+@router.post("/fraud-rings/freeze", response_model=MessageResponse)
+async def freeze_fraud_ring_accounts(
+    request: FreezeFraudRingRequest,
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Freeze (suspend) worker accounts involved in a fraud ring."""
+    # Find an existing stored ring if present (optional)
+    ring = None
+    try:
+        ring_result = await db.execute(select(FraudRing).where(FraudRing.ring_id == request.ring_id).limit(1))
+        ring = ring_result.scalar_one_or_none()
+    except Exception:
+        ring = None
+
+    # Determine members: request overrides ring record
+    member_ids = request.member_worker_ids
+    if (not member_ids) and ring is not None:
+        member_ids = ring.member_worker_ids or []
+
+    if not member_ids:
+        raise HTTPException(status_code=400, detail="No member_worker_ids provided")
+
+    # Suspend workers (best-effort)
+    result = await db.execute(select(Worker).where(Worker.id.in_(member_ids)))
+    workers = list(result.scalars().all())
+    for w in workers:
+        w.account_status = "SUSPENDED"
+
+    now = datetime.now(timezone.utc)
+
+    # Update ring record if it exists; otherwise create a stored record
+    if ring is None:
+        ring = FraudRing(
+            id=str(uuid.uuid4()),
+            ring_id=request.ring_id,
+            member_count=len(member_ids),
+            member_worker_ids=member_ids,
+            status="FROZEN",
+            detected_at=now,
+            resolved_at=now,
+            resolved_by=current_user.get("worker_id"),
+            notes=request.notes,
+        )
+        db.add(ring)
+    else:
+        ring.status = "FROZEN"
+        ring.resolved_at = now
+        ring.resolved_by = current_user.get("worker_id")
+        ring.notes = request.notes
+
+    await db.flush()
+
+    await AuditLogger.log(
+        db,
+        "FRAUD_RING",
+        request.ring_id,
+        "FRAUD_RING_FROZEN",
+        actor_id=current_user.get("worker_id") or "SYSTEM",
+        actor_role="ADMIN",
+        new_state={
+            "ring_id": request.ring_id,
+            "member_worker_ids": member_ids,
+            "notes": request.notes,
+        },
+    )
+
+    frozen_count = len(workers)
+    missing_count = max(0, len(member_ids) - frozen_count)
+    msg = f"Frozen {frozen_count} worker accounts for ring {request.ring_id}."
+    if missing_count:
+        msg += f" {missing_count} member IDs not found in database."
+
+    return MessageResponse(message=msg, success=(frozen_count > 0))
+
+
 @router.get("/workers")
 async def get_all_workers(
     current_user: dict = Depends(require_admin),
@@ -191,7 +276,7 @@ async def get_all_workers(
 @router.get("/audit-log")
 async def get_audit_log(
     limit: int = 50,
-    entity_type: str = None,
+    entity_type: Optional[str] = None,
     current_user: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):

@@ -34,6 +34,10 @@ export default function AdminDashboard() {
   }
 
   const handleResolve = async (claimId, action, notes = '') => {
+    if (!claimId || String(claimId).startsWith('rev-')) {
+      alert('This is demo review data (no real claim to resolve).')
+      return
+    }
     try {
       await api.post(`/api/admin/claims/${claimId}/resolve`, { action, notes })
       await loadData()
@@ -142,10 +146,17 @@ export default function AdminDashboard() {
       {tab === 'review' && (
         <div className="space-y-4">
           <h2 className="text-lg font-bold text-white">Claims Pending Review</h2>
+          {reviewQueue.length === 0 && (
+            <div className="glass-card p-5 border border-alert-500/20">
+              <p className="text-gray-300 text-sm">No real claims are pending review right now.</p>
+              <p className="text-gray-500 text-xs mt-1">Showing demo cards for layout only — actions are disabled.</p>
+            </div>
+          )}
+
           {(reviewQueue.length ? reviewQueue : [
-            { id: 'rev-1', claim_type: 'HEAVY_RAIN', zone_code: 'CHN-VEL-4B', fraud_tier: 'AMBER', fraud_score: 48, calculated_payout: 920, status: 'PENDING', confidence_score: 52 },
-            { id: 'rev-2', claim_type: 'AQI', zone_code: 'DEL-CON-1A', fraud_tier: 'RED', fraud_score: 72, calculated_payout: 1350, status: 'PENDING', confidence_score: 28 },
-            { id: 'rev-3', claim_type: 'FLOOD', zone_code: 'MUM-AND-1A', fraud_tier: 'AMBER', fraud_score: 35, calculated_payout: 780, status: 'APPEALED', confidence_score: 65 },
+            { id: 'rev-1', claim_type: 'HEAVY_RAIN', zone_code: 'CHN-VEL-4B', fraud_tier: 'AMBER', fraud_score: 48, calculated_payout: 920, status: 'PENDING', confidence_score: 52, __demo: true },
+            { id: 'rev-2', claim_type: 'AQI', zone_code: 'DEL-CON-1A', fraud_tier: 'RED', fraud_score: 72, calculated_payout: 1350, status: 'PENDING', confidence_score: 28, __demo: true },
+            { id: 'rev-3', claim_type: 'FLOOD', zone_code: 'MUM-AND-1A', fraud_tier: 'AMBER', fraud_score: 35, calculated_payout: 780, status: 'APPEALED', confidence_score: 65, __demo: true },
           ]).map(claim => (
             <div key={claim.id} className="glass-card p-5">
               <div className="flex items-center justify-between mb-3">
@@ -163,8 +174,22 @@ export default function AdminDashboard() {
                      style={{ width: `${claim.confidence_score || 50}%` }} />
               </div>
               <div className="flex gap-3">
-                <button onClick={() => handleResolve(claim.id, 'APPROVE', 'Admin approved after review')} className="btn-success flex-1 text-sm py-2">✓ Approve & Pay</button>
-                <button onClick={() => handleResolve(claim.id, 'REJECT', 'Fraud indicators confirmed')} className="btn-danger flex-1 text-sm py-2">✗ Reject</button>
+                <button
+                  onClick={() => handleResolve(claim.id, 'APPROVE', 'Admin approved after review')}
+                  className="btn-success flex-1 text-sm py-2"
+                  disabled={!!claim.__demo}
+                  title={claim.__demo ? 'Demo card (no backend action)' : ''}
+                >
+                  ✓ Approve & Pay
+                </button>
+                <button
+                  onClick={() => handleResolve(claim.id, 'REJECT', 'Fraud indicators confirmed')}
+                  className="btn-danger flex-1 text-sm py-2"
+                  disabled={!!claim.__demo}
+                  title={claim.__demo ? 'Demo card (no backend action)' : ''}
+                >
+                  ✗ Reject
+                </button>
               </div>
             </div>
           ))}

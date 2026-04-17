@@ -73,62 +73,112 @@ export default function AdminAIWorkbench() {
 function ResultDisplay({ result }) {
   if (!result) return null
 
-  const isStructured = result.investigation || result.validation || result.investigation || result.decision
+  const isStructured = result.investigation || result.validation || result.decision
 
   if (isStructured) {
-    const data = result.investigation || result.validation || result.investigation || result.decision
+    const data = result.investigation || result.validation || result.decision
+
+    const rawConfidence = data?.confidence
+    const confidencePct =
+      typeof rawConfidence === 'number'
+        ? (rawConfidence <= 1 ? rawConfidence * 100 : rawConfidence)
+        : null
+
+    const primaryAction =
+      data?.recommendation || data?.decision || data?.recommended_action || null
+
+    const summaryText =
+      data?.summary ||
+      data?.evidence_summary ||
+      data?.explanation_for_worker ||
+      null
+
+    const explanationText =
+      data?.explanation ||
+      data?.reasoning ||
+      null
+
+    const findingsList =
+      (Array.isArray(data?.key_findings) && data.key_findings) ||
+      (Array.isArray(data?.suspicious_signals) && data.suspicious_signals) ||
+      (Array.isArray(data?.connection_patterns) && data.connection_patterns) ||
+      null
+
+    const extraFacts = {}
+    if (data?.risk_level) extraFacts.risk_level = data.risk_level
+    if (data?.is_fraud_ring !== undefined) extraFacts.is_fraud_ring = data.is_fraud_ring
+    if (data?.members_involved !== undefined) extraFacts.members_involved = data.members_involved
+    if (data?.estimated_fraud_amount !== undefined) extraFacts.estimated_fraud_amount = data.estimated_fraud_amount
+    if (data?.false_positive_risk) extraFacts.false_positive_risk = data.false_positive_risk
+    if (data?.compensation_amount !== undefined) extraFacts.compensation_amount = data.compensation_amount
+    if (data?.goodwill_credit !== undefined) extraFacts.goodwill_credit = data.goodwill_credit
 
     return (
       <div className="space-y-4">
-        {data.recommendation && (
+        {primaryAction && (
           <div className={`p-4 rounded-xl border ${
-            data.recommendation === 'APPROVE' ? 'bg-safety-500/10 border-safety-500/30' :
-            data.recommendation === 'REJECT' ? 'bg-danger-500/10 border-danger-500/30' :
+            primaryAction === 'APPROVE' ? 'bg-safety-500/10 border-safety-500/30' :
+            primaryAction === 'REJECT' ? 'bg-danger-500/10 border-danger-500/30' :
             'bg-alert-500/10 border-alert-500/30'
           }`}>
             <div className="flex items-center gap-2 mb-2">
-              {data.recommendation === 'APPROVE' && <CheckCircle className="w-5 h-5 text-safety-400" />}
-              {data.recommendation === 'REJECT' && <XCircle className="w-5 h-5 text-danger-400" />}
-              {data.recommendation === 'NEEDS_HUMAN' && <Clock className="w-5 h-5 text-alert-400" />}
+              {primaryAction === 'APPROVE' && <CheckCircle className="w-5 h-5 text-safety-400" />}
+              {primaryAction === 'REJECT' && <XCircle className="w-5 h-5 text-danger-400" />}
+              {primaryAction === 'NEEDS_HUMAN' && <Clock className="w-5 h-5 text-alert-400" />}
               <span className={`font-semibold ${
-                data.recommendation === 'APPROVE' ? 'text-safety-400' :
-                data.recommendation === 'REJECT' ? 'text-danger-400' :
+                primaryAction === 'APPROVE' ? 'text-safety-400' :
+                primaryAction === 'REJECT' ? 'text-danger-400' :
                 'text-alert-400'
               }`}>
-                Recommendation: {data.recommendation}
+                Action: {primaryAction}
               </span>
             </div>
-            {data.summary && <p className="text-gray-300 text-sm">{data.summary}</p>}
+            {summaryText && <p className="text-gray-300 text-sm">{summaryText}</p>}
           </div>
         )}
 
-        {data.confidence !== undefined && (
+        {confidencePct !== null && (
           <div className="flex items-center gap-4">
             <span className="text-gray-400">Confidence:</span>
             <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
-              <div className="h-full bg-shield-500 rounded-full" style={{ width: `${data.confidence}%` }} />
+              <div className="h-full bg-shield-500 rounded-full" style={{ width: `${Math.max(0, Math.min(100, confidencePct))}%` }} />
             </div>
-            <span className="text-white font-medium">{data.confidence}%</span>
+            <span className="text-white font-medium">{confidencePct.toFixed(0)}%</span>
           </div>
         )}
 
-        {data.key_findings && data.key_findings.length > 0 && (
+        {findingsList && findingsList.length > 0 && (
           <div>
             <p className="text-gray-400 text-sm mb-2">Key Findings:</p>
             <ul className="space-y-1">
-              {data.key_findings.map((f, i) => (
+              {findingsList.map((f, i) => (
                 <li key={i} className="text-gray-300 text-sm">• {f}</li>
               ))}
             </ul>
           </div>
         )}
 
-        {data.signals && (
+        {(data.signals || data.source_reliability || data.signal_reassessment || Object.keys(extraFacts).length > 0) && (
           <div>
-            <p className="text-gray-400 text-sm mb-2">Fraud Signals:</p>
+            <p className="text-gray-400 text-sm mb-2">Details:</p>
             <div className="flex flex-wrap gap-2">
-              {Object.entries(data.signals).map(([key, val]) => (
-                <span key={key} className="px-2 py-1 bg-white/5 rounded text-xs text-gray-300">
+              {data.signals && Object.entries(data.signals).map(([key, val]) => (
+                <span key={`signals-${key}`} className="px-2 py-1 bg-white/5 rounded text-xs text-gray-300">
+                  {key}: {String(val)}
+                </span>
+              ))}
+              {data.source_reliability && Object.entries(data.source_reliability).map(([key, val]) => (
+                <span key={`source-${key}`} className="px-2 py-1 bg-white/5 rounded text-xs text-gray-300">
+                  source_{key}: {String(val)}
+                </span>
+              ))}
+              {data.signal_reassessment && Object.entries(data.signal_reassessment).map(([key, val]) => (
+                <span key={`reassess-${key}`} className="px-2 py-1 bg-white/5 rounded text-xs text-gray-300">
+                  {key}: {typeof val === 'object' ? JSON.stringify(val) : String(val)}
+                </span>
+              ))}
+              {Object.entries(extraFacts).map(([key, val]) => (
+                <span key={`fact-${key}`} className="px-2 py-1 bg-white/5 rounded text-xs text-gray-300">
                   {key}: {String(val)}
                 </span>
               ))}
@@ -136,9 +186,9 @@ function ResultDisplay({ result }) {
           </div>
         )}
 
-        {data.explanation && (
+        {explanationText && (
           <div className="p-4 bg-white/5 rounded-xl">
-            <p className="text-gray-300 text-sm whitespace-pre-wrap">{data.explanation}</p>
+            <p className="text-gray-300 text-sm whitespace-pre-wrap">{explanationText}</p>
           </div>
         )}
       </div>
